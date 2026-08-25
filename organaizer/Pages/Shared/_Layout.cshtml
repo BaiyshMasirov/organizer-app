@@ -1,0 +1,37 @@
+@inject organaizer.Infrastructure.ActiveCompany ActiveCompanyContext
+@{
+  var activeCompany = await ActiveCompanyContext.GetAsync();
+  var page = ViewContext.RouteData.Values["page"]?.ToString() ?? "";
+  var sectionTitle = page.StartsWith("/Balance") ? "Баланс" : page.StartsWith("/Operations") ? "Операции" : page.StartsWith("/Expenses") ? "Расходы" : page.StartsWith("/ExchangeRates") ? "Курсы валют" : page.StartsWith("/Clients") ? "Клиенты" : page.StartsWith("/Currencies") ? "Валюты" : page.StartsWith("/Institutions") ? "Банки и каналы" : page.StartsWith("/Reports") ? "Отчеты" : "Обзор";
+  var sectionPage = page.StartsWith("/Balance") ? "/Balance/Index" : page.StartsWith("/Operations") ? "/Operations/Index" : page.StartsWith("/Expenses") ? "/Expenses/Index" : page.StartsWith("/ExchangeRates") ? "/ExchangeRates/Index" : page.StartsWith("/Clients") ? "/Clients/Index" : page.StartsWith("/Currencies") ? "/Currencies/Index" : page.StartsWith("/Institutions") ? "/Institutions/Index" : page.StartsWith("/Reports") ? "/Reports/Index" : "/Index";
+  var isSectionIndex = page == sectionPage || page == "/Index";
+}
+<!doctype html><html lang="ru"><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><meta name="color-scheme" content="light"/>
+  <title>@ViewData["Title"] · Finance Flow</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@@tabler/core@@1.4.0/dist/css/tabler.min.css"/>
+  <link rel="stylesheet" href="~/css/site.css" asp-append-version="true"/>
+</head><body><div class="page">
+<aside class="navbar navbar-vertical navbar-expand-lg sidebar-dark" data-bs-theme="dark"><div class="container-fluid">
+  <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu"><span class="navbar-toggler-icon"></span></button>
+  <h1 class="navbar-brand navbar-brand-autodark"><a asp-page="/Index" class="brand-lockup"><span class="brand-mark">F</span><span>Finance <b>Flow</b><small>LIQUIDITY CONTROL</small></span></a></h1>
+  <div class="collapse navbar-collapse" id="sidebar-menu"><ul class="navbar-nav pt-lg-3">
+    <li class="nav-item @(page=="/Index"?"active":"")"><a class="nav-link" asp-page="/Index"><span class="nav-link-icon">⌂</span><span class="nav-link-title">Обзор</span></a></li>
+    <li class="nav-item @(page.StartsWith("/Operations")?"active":"")"><a class="nav-link" asp-page="/Operations/Index"><span class="nav-link-icon">⇄</span><span class="nav-link-title">Операции</span></a></li>
+    <li class="nav-section">УЧЕТ</li>
+    <li class="nav-item @(page.StartsWith("/Balance")?"active":"")"><a class="nav-link" asp-page="/Balance/Index"><span class="nav-link-icon">▣</span><span class="nav-link-title">Баланс</span></a></li>
+    <li class="nav-item @(page.StartsWith("/Clients")?"active":"")"><a class="nav-link" asp-page="/Clients/Index"><span class="nav-link-icon">◎</span><span class="nav-link-title">Клиенты</span></a></li>
+    <li class="nav-item @(page.StartsWith("/Currencies")?"active":"")"><a class="nav-link" asp-page="/Currencies/Index"><span class="nav-link-icon">¤</span><span class="nav-link-title">Валюты</span></a></li>
+    <li class="nav-item @(page.StartsWith("/Institutions")?"active":"")"><a class="nav-link" asp-page="/Institutions/Index"><span class="nav-link-icon">▦</span><span class="nav-link-title">Банки и каналы</span></a></li>
+    <li class="nav-item @(page.StartsWith("/Expenses")?"active":"")"><a class="nav-link" asp-page="/Expenses/Index"><span class="nav-link-icon">↘</span><span class="nav-link-title">Расходы</span></a></li>
+    <li class="nav-item @(page.StartsWith("/ExchangeRates")?"active":"")"><a class="nav-link" asp-page="/ExchangeRates/Index"><span class="nav-link-icon">$</span><span class="nav-link-title">Курсы валют</span></a></li>
+    <li class="nav-section">АНАЛИТИКА</li><li class="nav-item @(page.StartsWith("/Reports")?"active":"")"><a class="nav-link" asp-page="/Reports/Index"><span class="nav-link-icon">▥</span><span class="nav-link-title">Промежуточный отчет</span></a></li>
+    <li class="nav-item"><a class="nav-link" href="http://@Context.Request.Host.Host:5045" target="_blank"><span class="nav-link-icon">◒</span><span class="nav-link-title">Диаграммы и итоги</span></a></li>
+  </ul></div>
+  <div class="sidebar-footer"><div class="company-chip"><span class="status-dot status-dot-animated bg-green"></span><div><strong>Система работает</strong><small>PostgreSQL · CQRS</small></div></div></div>
+</div></aside>
+<div class="page-wrapper"><header class="navbar navbar-expand-md topbar d-print-none"><div class="container-xl">
+  <div><div class="text-secondary small">ТЕКУЩАЯ КОМПАНИЯ</div><div class="fw-semibold">@(activeCompany?.Name ?? "Не выбрана") <a asp-page="/Company/Select" class="small ms-2">Сменить</a></div></div>
+  <div class="navbar-nav flex-row order-md-last"><div class="nav-item d-flex align-items-center gap-3"><span class="avatar avatar-sm bg-indigo-lt">@((User.Identity?.Name ?? "U")[0].ToString().ToUpperInvariant())</span><div class="d-none d-md-block"><div class="small fw-semibold">@User.Identity?.Name</div><div class="small text-secondary">Administrator</div></div><form method="post" asp-page="/Account/Logout"><button class="btn btn-ghost-secondary btn-sm" title="Выйти">Выйти</button></form></div></div>
+</div></header><div class="breadcrumb-strip"><div class="container-xl"><nav aria-label="breadcrumb"><ol class="breadcrumb mb-0"><li class="breadcrumb-item"><a asp-page="/Index">Главная</a></li>@if(page!="/Index"){<li class="breadcrumb-item @(isSectionIndex?"active":"")">@if(isSectionIndex){@sectionTitle}else{<a asp-page="@sectionPage">@sectionTitle</a>}</li>}@if(!isSectionIndex){<li class="breadcrumb-item active" aria-current="page">@ViewData["Title"]</li>}</ol></nav></div></div><main class="page-body"><div class="container-xl">@RenderBody()</div></main><footer class="footer footer-transparent d-print-none"><div class="container-xl text-secondary">Finance Flow · Financial operations workspace</div></footer></div>
+</div><script src="https://cdn.jsdelivr.net/npm/@@tabler/core@@1.4.0/dist/js/tabler.min.js"></script><script src="~/lib/jquery/dist/jquery.min.js"></script><script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script><script src="~/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js"></script>@await RenderSectionAsync("Scripts", required: false)</body></html>

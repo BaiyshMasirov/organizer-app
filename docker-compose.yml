@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: finance
+      POSTGRES_USER: finance
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finance_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance -d finance"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  web:
+    build: .
+    ports: ["5050:8080"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Finance: Host=db;Port=5432;Database=finance;Username=finance;Password=${POSTGRES_PASSWORD:-finance_dev}
+      HistoricalImportPath: /app/import/historical-data.json
+    volumes:
+      - ./imports:/app/import:ro
+    depends_on:
+      db:
+        condition: service_healthy
+  analytics:
+    build:
+      context: .
+      dockerfile: Dockerfile.analytics
+    ports: ["5045:8080"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Finance: Host=db;Port=5432;Database=finance;Username=finance;Password=${POSTGRES_PASSWORD:-finance_dev}
+      AnalyticsAuth__Username: admin
+      AnalyticsAuth__Password: ${ANALYTICS_PASSWORD:-eaf@)20}
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  postgres_data:

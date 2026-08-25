@@ -1,0 +1,8 @@
+using Microsoft.AspNetCore.Mvc;using Microsoft.AspNetCore.Mvc.Rendering;using Microsoft.AspNetCore.Mvc.RazorPages;using Microsoft.EntityFrameworkCore;using organaizer.Domain;using organaizer.Infrastructure;
+namespace organaizer.Pages.Expenses;
+public sealed class CreateModel(FinanceDbContext db):PageModel
+{
+ [BindProperty]public ExpenseForm Input{get;set;}=new();public SelectList Companies{get;private set;}=null!;public SelectList Accounts{get;private set;}=null!;public SelectList Currencies{get;private set;}=null!;
+ public async Task OnGetAsync()=>await Load();public async Task<IActionResult>OnPostAsync(){var account=await db.Accounts.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==Input.AccountId);if(account is null||account.CompanyId!=Input.CompanyId)ModelState.AddModelError("Input.AccountId","Счет не принадлежит выбранной компании");if(!ModelState.IsValid){await Load();return Page();}db.Expenses.Add(new Expense{Id=Guid.NewGuid(),CompanyId=Input.CompanyId,AccountId=Input.AccountId,OccurredAt=new DateTimeOffset(Input.OccurredAt,TimeSpan.Zero),Category=Input.Category.Trim(),Amount=Input.Amount,Currency=Input.Currency.ToUpperInvariant(),BaseCurrencyAmount=0,Note=Input.Note?.Trim()});await db.SaveChangesAsync();return RedirectToPage("Index");}
+ async Task Load(){Companies=new SelectList(await db.Companies.AsNoTracking().OrderBy(x=>x.Name).ToListAsync(),"Id","Name",Input.CompanyId);Accounts=new SelectList(await db.Accounts.AsNoTracking().OrderBy(x=>x.Name).ToListAsync(),"Id","Name",Input.AccountId);Currencies=new SelectList(await db.Currencies.AsNoTracking().Where(x=>x.IsActive).OrderBy(x=>x.Code).ToListAsync(),"Code","Code",Input.Currency);ViewData["Companies"]=Companies;ViewData["Accounts"]=Accounts;ViewData["Currencies"]=Currencies;}
+}

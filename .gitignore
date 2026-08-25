@@ -1,0 +1,10 @@
+.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+.env
+.env.*
+finance-flow-update.tar.gz
+imports/historical-data.json
+.import-tools/node_modules/

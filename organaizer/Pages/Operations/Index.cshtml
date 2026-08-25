@@ -1,0 +1,45 @@
+@page
+@model organaizer.Pages.Operations.IndexModel
+@using organaizer.Domain
+@{ ViewData["Title"] = "Операции"; }
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div><h1 class="mb-1">Операции</h1><div class="text-secondary">Поиск, фильтрация и управление операциями</div></div>
+    <a asp-page="Create" class="btn btn-primary">+ Новая операция</a>
+</div>
+
+@if (TempData["Message"] is string message) { <div class="alert alert-success">@message</div> }
+
+<form method="get" class="card card-body mb-4">
+    <div class="row g-3">
+        <div class="col-lg-4"><label class="form-label">Поиск</label><input name="search" value="@Model.Search" class="form-control" placeholder="Клиент, комментарий или валюта"></div>
+        <div class="col-lg-2 col-md-4"><label class="form-label">Компания</label><select name="companyId" class="form-select"><option value="">Все компании</option>@foreach(var c in Model.Companies){<option value="@c.Id" selected="@(Model.CompanyId==c.Id)">@c.Name</option>}</select></div>
+        <div class="col-lg-3 col-md-4"><label class="form-label">Тип операции</label><select name="typeCode" class="form-select"><option value="">Все типы</option>@foreach(var t in OperationTypes.All){<option value="@t.Key" selected="@(Model.TypeCode==t.Key)">@t.Value</option>}</select></div>
+        <div class="col-lg-3 col-md-4"><label class="form-label">Статус</label><select name="status" class="form-select"><option value="">Все статусы</option><option value="created" selected="@(Model.Status=="created")">Создана</option><option value="completed" selected="@(Model.Status=="completed")">Завершена</option><option value="cancelled" selected="@(Model.Status=="cancelled")">Отменена</option></select></div>
+        <div class="col-md-3"><label class="form-label">Дата от</label><input name="from" value="@Model.From?.ToString("yyyy-MM-dd")" type="date" class="form-control"></div>
+        <div class="col-md-3"><label class="form-label">Дата до</label><input name="to" value="@Model.To?.ToString("yyyy-MM-dd")" type="date" class="form-control"></div>
+        <div class="col-md-6 d-flex align-items-end gap-2"><button class="btn btn-primary">Применить</button><a asp-page="Index" class="btn btn-outline-secondary">Сбросить</a></div>
+    </div>
+</form>
+
+<div class="card">
+    <div class="card-header"><span>Найдено операций</span><span class="badge bg-blue-lt ms-2">@Model.TotalCount</span><span class="text-secondary ms-auto">Страница @Model.PageNumber из @Model.TotalPages</span></div>
+    <div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>Дата</th><th>Тип / клиент</th><th>Отдаем</th><th>Получаем</th><th>Прибыль</th><th>Статус</th><th></th></tr></thead><tbody>
+    @foreach(var x in Model.Items){<tr>
+        <td class="text-nowrap">@x.OccurredAt.ToString("dd.MM.yyyy")</td>
+        <td><strong>@OperationTypes.All.GetValueOrDefault(x.TypeCode,x.TypeCode)</strong><div class="small text-secondary">@(x.Counterparty?.Name??"Без клиента")</div></td>
+        <td class="text-nowrap">@x.SellAmount.ToString("N2") <span class="text-secondary">@x.SellCurrency</span></td>
+        <td class="text-nowrap">@x.BuyAmount.ToString("N2") <span class="text-secondary">@x.BuyCurrency</span></td>
+        <td class="text-nowrap @(x.BaseCurrencyProfit<0?"text-danger":"text-success")">@x.BaseCurrencyProfit.ToString("N2") USD</td>
+        <td><span class="badge @(x.Status==OperationStatus.Cancelled?"bg-secondary-lt":x.Status==OperationStatus.Settled?"bg-green-lt":"bg-blue-lt")">@OperationStatuses.Label(x.Status)</span></td>
+        <td class="text-end text-nowrap"><a asp-page="Details" asp-route-id="@x.Id" class="btn btn-sm btn-icon btn-ghost-secondary" title="Просмотр">◉</a><a asp-page="Create" asp-route-copyFrom="@x.Id" class="btn btn-sm btn-icon btn-ghost-secondary" title="Копировать в новую операцию">⧉</a><a asp-page="Edit" asp-route-id="@x.Id" class="btn btn-sm btn-icon btn-ghost-primary" title="Изменить">✎</a>@if(x.Status!=OperationStatus.Settled&&x.Status!=OperationStatus.Cancelled){<form method="post" asp-page-handler="Complete" asp-route-id="@x.Id" asp-route-search="@Model.Search" asp-route-typeCode="@Model.TypeCode" asp-route-status="@Model.Status" asp-route-from="@Model.From?.ToString("yyyy-MM-dd")" asp-route-to="@Model.To?.ToString("yyyy-MM-dd")" asp-route-pageNumber="@Model.PageNumber" class="d-inline" onsubmit="return confirm('Подтвердить завершение операции?');"><button class="btn btn-sm btn-icon btn-ghost-success" title="Завершить">✓</button></form>}@if(x.Status!=OperationStatus.Cancelled){<form method="post" asp-page-handler="Cancel" asp-route-id="@x.Id" asp-route-search="@Model.Search" asp-route-companyId="@Model.CompanyId" asp-route-typeCode="@Model.TypeCode" asp-route-status="@Model.Status" asp-route-from="@Model.From?.ToString("yyyy-MM-dd")" asp-route-to="@Model.To?.ToString("yyyy-MM-dd")" asp-route-pageNumber="@Model.PageNumber" class="d-inline" onsubmit="return confirm('Отменить операцию? Она останется в истории.');"><button class="btn btn-sm btn-icon btn-ghost-danger" title="Отменить">✕</button></form>}</td>
+    </tr>}
+    @if(Model.Items.Count==0){<tr><td colspan="7" class="text-center text-secondary py-5">По заданным условиям операций не найдено</td></tr>}
+    </tbody></table></div>
+</div>
+
+@if(Model.TotalPages>1){var first=Math.Max(1,Model.PageNumber-2);var last=Math.Min(Model.TotalPages,Model.PageNumber+2);<nav class="mt-4" aria-label="Навигация по операциям"><ul class="pagination justify-content-center">
+    <li class="page-item @(Model.PageNumber==1?"disabled":"")"><a class="page-link" asp-route-search="@Model.Search" asp-route-companyId="@Model.CompanyId" asp-route-typeCode="@Model.TypeCode" asp-route-status="@Model.Status" asp-route-from="@Model.From?.ToString("yyyy-MM-dd")" asp-route-to="@Model.To?.ToString("yyyy-MM-dd")" asp-route-pageNumber="@(Model.PageNumber-1)">Назад</a></li>
+    @for(var p=first;p<=last;p++){<li class="page-item @(p==Model.PageNumber?"active":"")"><a class="page-link" asp-route-search="@Model.Search" asp-route-companyId="@Model.CompanyId" asp-route-typeCode="@Model.TypeCode" asp-route-status="@Model.Status" asp-route-from="@Model.From?.ToString("yyyy-MM-dd")" asp-route-to="@Model.To?.ToString("yyyy-MM-dd")" asp-route-pageNumber="@p">@p</a></li>}
+    <li class="page-item @(Model.PageNumber==Model.TotalPages?"disabled":"")"><a class="page-link" asp-route-search="@Model.Search" asp-route-companyId="@Model.CompanyId" asp-route-typeCode="@Model.TypeCode" asp-route-status="@Model.Status" asp-route-from="@Model.From?.ToString("yyyy-MM-dd")" asp-route-to="@Model.To?.ToString("yyyy-MM-dd")" asp-route-pageNumber="@(Model.PageNumber+1)">Вперед</a></li>
+</ul></nav>}

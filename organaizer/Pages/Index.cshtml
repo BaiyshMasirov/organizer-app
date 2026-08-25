@@ -1,0 +1,18 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Финансовый обзор";
+}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div><h1>Финансовый обзор</h1><p class="text-muted mb-0">Управленческий учет по компаниям и валютам</p></div>
+  <a class="btn btn-primary" asp-page="/Operations/Create">+ Новая операция</a>
+</div>
+<div class="row g-3 mb-4">
+ <div class="col-md-4"><div class="metric"><span>Торговая прибыль</span><strong>@Model.Dashboard.TradingProfit.ToString("N2") USD</strong></div></div>
+ <div class="col-md-4"><div class="metric"><span>Расходы</span><strong class="text-danger">@Model.Dashboard.Expenses.ToString("N2") USD</strong></div></div>
+ <div class="col-md-4"><div class="metric accent"><span>Чистая прибыль</span><strong>@Model.Dashboard.NetProfit.ToString("N2") USD</strong></div></div>
+</div>
+<div class="row g-4">
+ <div class="col-lg-5"><div class="card h-100"><div class="card-header">Остатки на счетах</div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Счет</th><th>Валюта</th><th class="text-end">Остаток</th></tr></thead><tbody>@foreach(var x in Model.Dashboard.Balances){<tr><td>@x.Account</td><td>@x.Currency</td><td class="text-end">@x.Balance.ToString("N2")</td></tr>}</tbody></table></div></div></div>
+ <div class="col-lg-7"><div class="card h-100"><div class="card-header d-flex justify-content-between"><span>Незакрытые операции</span><a asp-page="/Operations/Index">Все операции</a></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Дата</th><th>Тип</th><th>Контрагент</th><th>Обязательство</th></tr></thead><tbody>@foreach(var x in Model.Dashboard.OpenOperations){<tr><td>@x.Date.ToString("dd.MM.yy")</td><td>@(organaizer.Domain.OperationTypes.All.GetValueOrDefault(x.Type,x.Type))</td><td>@x.Counterparty</td><td>@x.Debt</td></tr>}</tbody></table></div></div></div>
+</div>
