@@ -20,6 +20,8 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
     [BindProperty]
     public InputModel Input { get; set; } = new();
 
+    private sealed record HistoryEntry(DateTimeOffset OccurredAt, decimal Amount, string Kind, string Description);
+
     public sealed class InputModel
     {
         [Required(ErrorMessage = "Выберите кошелек или банк")]
@@ -33,6 +35,50 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
     }
 
     public async Task OnGetAsync() => await LoadAsync();
+
+    public async Task<IActionResult> OnGetHistoryAsync(Guid accountId)
+    {
+        var account = await db.Accounts.AsNoTracking().Include(x => x.FinancialInstitution)
+            .SingleOrDefaultAsync(x => x.Id == accountId && x.CompanyId == active.RequiredId && x.IsActive);
+        if (account is null) return NotFound();
+
+        var settlements = await db.Settlements.AsNoTracking()
+            .Where(x => x.AccountId == accountId && x.Operation!.Status != OperationStatus.Cancelled)
+            .Select(x => new { x.OccurredAt, x.Amount, x.Note, x.Operation!.TypeCode, Counterparty = x.Operation.Counterparty != null ? x.Operation.Counterparty.Name : null })
+            .ToListAsync();
+        var expenses = await db.Expenses.AsNoTracking().Where(x => x.AccountId == accountId)
+            .Select(x => new { x.OccurredAt, x.Amount, x.Category, x.Note }).ToListAsync();
+        var movements = await db.AccountMovements.AsNoTracking().Where(x => x.AccountId == accountId)
+            .Select(x => new { x.OccurredAt, x.Amount, x.Kind, x.Note }).ToListAsync();
+
+        var entries = new List<HistoryEntry>();
+        entries.AddRange(settlements.Select(x => new HistoryEntry(x.OccurredAt, x.Amount, "Операция",
+            string.Join(" · ", new[] { OperationTypes.All.GetValueOrDefault(x.TypeCode, x.TypeCode), x.Counterparty, x.Note }.Where(v => !string.IsNullOrWhiteSpace(v))))));
+        entries.AddRange(expenses.Select(x => new HistoryEntry(x.OccurredAt, -x.Amount, "Расход",
+            string.Join(" · ", new[] { x.Category, x.Note }.Where(v => !string.IsNullOrWhiteSpace(v))))));
+        entries.AddRange(movements.Select(x => new HistoryEntry(x.OccurredAt, x.Amount,
+            x.Kind == AccountMovementKind.Transfer ? "Перевод" : "Конвертация", x.Note ?? "")));
+
+        decimal runningBalance = account.OpeningBalance;
+        var statement = entries.OrderBy(x => x.OccurredAt).ThenBy(x => x.Kind).Select(x =>
+        {
+            runningBalance += x.Amount;
+            return new { x.OccurredAt, x.Amount, x.Kind, x.Description, Balance = runningBalance };
+        }).ToList();
+        var almatyOffset = TimeSpan.FromHours(6);
+        return new JsonResult(new
+        {
+            account = account.FinancialInstitution?.Name ?? account.Name,
+            account.Currency,
+            openingBalance = account.OpeningBalance,
+            currentBalance = runningBalance,
+            items = statement.OrderByDescending(x => x.OccurredAt).Take(100).Select(x => new
+            {
+                date = x.OccurredAt.ToOffset(almatyOffset).ToString("dd.MM.yyyy HH:mm"),
+                x.Kind, x.Description, x.Amount, x.Balance
+            })
+        });
+    }
 
     public async Task<IActionResult> OnPostAsync()
     {
