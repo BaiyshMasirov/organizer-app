@@ -102,8 +102,6 @@ public sealed class AddSettlementHandler(FinanceDbContext db) : ICommandHandler<
         var account = await db.Accounts.SingleAsync(x => x.Id == c.AccountId, ct);
         if (account.CompanyId != op.CompanyId) throw new ArgumentException("Счет не принадлежит компании операции");
         if (!account.Currency.Equals(c.Currency, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Валюта счета не совпадает с валютой платежа");
-        if (c.Amount < 0 && await BalanceCalculator.GetAsync(db, account.Id, ct) < Math.Abs(c.Amount))
-            throw new InvalidOperationException("Недостаточно средств на счете");
         db.Settlements.Add(new Settlement { Id=Guid.NewGuid(), OperationId=c.OperationId, AccountId=c.AccountId,
             OccurredAt=c.OccurredAt.ToUniversalTime(), Amount=c.Amount, Currency=c.Currency.ToUpperInvariant(), Note=c.Note });
         var paidSell = op.Settlements.Where(x => x.Currency == op.SellCurrency).Sum(x => Math.Abs(x.Amount)) + (c.Currency == op.SellCurrency ? Math.Abs(c.Amount) : 0);
