@@ -81,7 +81,7 @@ public sealed class NbkrRateSyncWorker(IServiceProvider services, ILogger<NbkrRa
                 await scope.ServiceProvider.GetRequiredService<NbkrRateService>().SyncAsync(stoppingToken);
             }
             catch (Exception ex) when (!stoppingToken.IsCancellationRequested) { logger.LogError(ex, "Не удалось обновить курсы НБКР"); }
-            await Task.Delay(TimeSpan.FromHours(6), stoppingToken);
+            await Task.Delay(TimeSpan.FromDays(1), stoppingToken);
         }
     }
 }
