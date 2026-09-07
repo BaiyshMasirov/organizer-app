@@ -26,9 +26,13 @@ builder.Services.ConfigureApplicationCookie(options =>
 builder.Services.AddAuthorization(options => options.FallbackPolicy = options.DefaultPolicy);
 builder.Services.AddScoped<Dispatcher>();
 builder.Services.AddScoped<ActiveCompany>();
+builder.Services.AddHttpClient("nbkr", c => { c.BaseAddress = new Uri("https://www.nbkr.kg/"); c.Timeout = TimeSpan.FromSeconds(30); });
+builder.Services.AddScoped<NbkrRateService>();
+builder.Services.AddHostedService<NbkrRateSyncWorker>();
 builder.Services.AddScoped<ICommandHandler<CreateOperationCommand, Guid>, CreateOperationHandler>();
 builder.Services.AddScoped<ICommandHandler<UpdateOperationCommand, bool>, UpdateOperationHandler>();
 builder.Services.AddScoped<ICommandHandler<CancelOperationCommand, bool>, CancelOperationHandler>();
+builder.Services.AddScoped<ICommandHandler<ReactivateOperationCommand, bool>, ReactivateOperationHandler>();
 builder.Services.AddScoped<ICommandHandler<CompleteOperationCommand, bool>, CompleteOperationHandler>();
 builder.Services.AddScoped<ICommandHandler<AddSettlementCommand, bool>, AddSettlementHandler>();
 builder.Services.AddScoped<IQueryHandler<DashboardQuery, DashboardDto>, DashboardHandler>();

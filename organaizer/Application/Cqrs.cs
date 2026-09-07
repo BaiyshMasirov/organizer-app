@@ -44,7 +44,7 @@ public sealed class CreateOperationHandler(FinanceDbContext db) : ICommandHandle
 public sealed record UpdateOperationCommand(Guid Id, Guid CompanyId, Guid? CounterpartyId, string TypeCode,
     DateTimeOffset OccurredAt, DateTimeOffset? DueAt, string SellCurrency, decimal SellAmount,
     string BuyCurrency, decimal BuyAmount, decimal FeeAmount, string FeeCurrency,
-    decimal BaseCurrencyProfit, OperationStatus Status, string? SourceAccount, string? DestinationAccount, string? Note) : ICommand<bool>;
+    decimal BaseCurrencyProfit, decimal? ExchangeRate, OperationStatus Status, string? SourceAccount, string? DestinationAccount, string? Note) : ICommand<bool>;
 
 public sealed class UpdateOperationHandler(FinanceDbContext db) : ICommandHandler<UpdateOperationCommand, bool>
 {
@@ -58,7 +58,7 @@ public sealed class UpdateOperationHandler(FinanceDbContext db) : ICommandHandle
         op.SellCurrency=c.SellCurrency.ToUpperInvariant(); op.SellAmount=c.SellAmount;
         op.BuyCurrency=c.BuyCurrency.ToUpperInvariant(); op.BuyAmount=c.BuyAmount;
         op.FeeAmount=c.FeeAmount; op.FeeCurrency=c.FeeCurrency.ToUpperInvariant();
-        op.BaseCurrencyProfit=c.BaseCurrencyProfit; op.Status=c.Status; op.SourceAccount=c.SourceAccount;
+        op.BaseCurrencyProfit=c.BaseCurrencyProfit; op.ExchangeRate=c.ExchangeRate; op.Status=c.Status; op.SourceAccount=c.SourceAccount;
         op.DestinationAccount=c.DestinationAccount; op.Note=c.Note;
         await db.SaveChangesAsync(ct);
         return true;
@@ -73,6 +73,19 @@ public sealed class CancelOperationHandler(FinanceDbContext db) : ICommandHandle
         var operation=await db.Operations.SingleOrDefaultAsync(x=>x.Id==c.Id,ct);
         if(operation is null)return false;
         operation.Status=OperationStatus.Cancelled;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+}
+
+public sealed record ReactivateOperationCommand(Guid Id) : ICommand<bool>;
+public sealed class ReactivateOperationHandler(FinanceDbContext db) : ICommandHandler<ReactivateOperationCommand, bool>
+{
+    public async Task<bool> Handle(ReactivateOperationCommand c, CancellationToken ct)
+    {
+        var operation=await db.Operations.SingleOrDefaultAsync(x=>x.Id==c.Id,ct);
+        if(operation is null || operation.Status!=OperationStatus.Cancelled)return false;
+        operation.Status=OperationStatus.Open;
         await db.SaveChangesAsync(ct);
         return true;
     }
@@ -152,18 +165,19 @@ public sealed class MonthlyReportHandler(FinanceDbContext db) : IQueryHandler<Mo
 {
     public async Task<MonthlyReportDto> Handle(MonthlyReportQuery q, CancellationToken ct)
     {
-        var operations = db.Operations.AsNoTracking().Include(x=>x.Counterparty).Where(x => x.OccurredAt >= q.From && x.OccurredAt < q.To && x.Status != OperationStatus.Cancelled);
+        var operations = db.Operations.AsNoTracking().Include(x=>x.Counterparty).Where(x => x.OccurredAt >= q.From && x.OccurredAt < q.To && x.Status == OperationStatus.Settled);
         var expenses = db.Expenses.AsNoTracking().Where(x => x.OccurredAt >= q.From && x.OccurredAt < q.To);
         if (q.CompanyId is { } companyId) { operations=operations.Where(x=>x.CompanyId==companyId); expenses=expenses.Where(x=>x.CompanyId==companyId); }
         var rows = await operations.ToListAsync(ct);
         var expenseRows = await expenses.ToListAsync(ct);
         var companyKinds = await db.Companies.AsNoTracking().ToDictionaryAsync(x=>x.Id,x=>x.Kind,ct);
-        var rateRows=await db.ExchangeRates.AsNoTracking().Where(x=>x.EffectiveAt<q.To).OrderBy(x=>x.EffectiveAt).ThenBy(x=>x.SourceOrder).ThenBy(x=>x.ImportKey==null?1:0).ToListAsync(ct);
+        var rateRows=await db.ExchangeRates.AsNoTracking().Where(x=>x.EffectiveAt<q.To&&x.RateToUsd>0&&x.RateToUsd<2).OrderBy(x=>x.EffectiveAt).ThenBy(x=>x.SourceOrder).ThenBy(x=>x.ImportKey==null?1:0).ToListAsync(ct);
         var usdRates=rateRows.GroupBy(x=>x.Currency,StringComparer.OrdinalIgnoreCase).ToDictionary(g=>g.Key,g=>g.Last().RateToUsd,StringComparer.OrdinalIgnoreCase);
         usdRates["USDT"]=1m;if(!usdRates.ContainsKey("USD"))usdRates["USD"]=1m;
         decimal InUsd(decimal amount,string currency) => amount * usdRates.GetValueOrDefault(currency.ToUpperInvariant(),0m);
+        var brokerProfitFieldFrom = new DateTimeOffset(2026,9,1,0,0,0,TimeSpan.Zero);
         decimal OperationProfit(TradeOperation x) => companyKinds.GetValueOrDefault(x.CompanyId)==CompanyKind.Broker
-            ? InUsd(x.FeeAmount,x.FeeCurrency)+x.BaseCurrencyProfit
+            ? x.OccurredAt >= brokerProfitFieldFrom ? x.BaseCurrencyProfit : InUsd(x.FeeAmount,x.FeeCurrency)+x.BaseCurrencyProfit
             : InUsd(x.BuyAmount,x.BuyCurrency)-InUsd(x.SellAmount,x.SellCurrency);
         var summaries = rows.GroupBy(x=>new{x.TypeCode,x.SellCurrency,x.BuyCurrency}).Select(g=>new OperationSummaryDto(g.Key.TypeCode,g.Count(),g.Sum(x=>x.SellAmount),g.Key.SellCurrency,g.Sum(x=>x.BuyAmount),g.Key.BuyCurrency,g.Sum(OperationProfit),g.Where(x=>companyKinds.GetValueOrDefault(x.CompanyId)==CompanyKind.LiquidityProvider).Sum(x=>InUsd(x.FeeAmount,x.FeeCurrency)))).OrderByDescending(x=>x.Count).ToList();
         var lpRows=rows.Where(x=>companyKinds.GetValueOrDefault(x.CompanyId)==CompanyKind.LiquidityProvider).ToList();
@@ -200,7 +214,7 @@ public sealed class MonthlyReportHandler(FinanceDbContext db) : IQueryHandler<Mo
                 {
                     var latest=await db.MonthlyBalanceSnapshots.AsNoTracking().Where(x=>x.Period==latestPeriod).ToListAsync(ct);var start=latestPeriod.Value.AddMonths(1);
                     var liquidityCompanyIds=companyKinds.Where(c=>c.Value==CompanyKind.LiquidityProvider).Select(c=>c.Key).ToList();
-                    var priorOps=await db.Operations.AsNoTracking().Where(x=>x.OccurredAt>=start&&x.OccurredAt<q.From&&x.Status!=OperationStatus.Cancelled&&liquidityCompanyIds.Contains(x.CompanyId)).ToListAsync(ct);
+                    var priorOps=await db.Operations.AsNoTracking().Where(x=>x.OccurredAt>=start&&x.OccurredAt<q.From&&x.Status==OperationStatus.Settled&&liquidityCompanyIds.Contains(x.CompanyId)).ToListAsync(ct);
                     var priorExpenses=await db.Expenses.AsNoTracking().Where(x=>x.OccurredAt>=start&&x.OccurredAt<q.From&&liquidityCompanyIds.Contains(x.CompanyId)).ToListAsync(ct);
                     foreach(var currency in latest.Select(x=>x.Currency).Concat(rows.SelectMany(x=>new[]{x.BuyCurrency,x.SellCurrency})).Distinct())
                     {

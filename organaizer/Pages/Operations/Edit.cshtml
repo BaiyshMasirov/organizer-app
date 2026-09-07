@@ -1,6 +1,54 @@
 @page "{id:guid}"
 @model organaizer.Pages.Operations.EditModel
 @{ViewData["Title"]="Редактирование операции";}
-<div class="d-flex justify-content-between align-items-center mb-4"><h1>Редактирование операции</h1><a asp-page="Details" asp-route-id="@Model.Input.Id" class="btn btn-ghost-secondary">Отмена</a></div><form method="post" class="card card-body"><input asp-for="Input.Id" type="hidden"/><div asp-validation-summary="ModelOnly" class="text-danger"></div><div class="row g-3">
-<div class="col-md-6"><label class="form-label">Компания</label><select asp-for="Input.CompanyId" asp-items="Model.Companies" class="form-select"></select></div><div class="col-md-6"><label class="form-label">Клиент / партнер</label><select asp-for="Input.CounterpartyId" asp-items="Model.Counterparties" class="form-select"><option value="">Без контрагента</option></select></div><div class="col-12"><label class="form-label">Тип операции</label><select asp-for="Input.TypeCode" class="form-select">@foreach(var t in Model.Types){<option value="@t.Key">@t.Value</option>}</select></div>
-<div class="col-md-3"><label class="form-label">Дата</label><input asp-for="Input.OccurredAt" type="date" class="form-control"/></div><div class="col-md-3"><label class="form-label">Срок расчета</label><input asp-for="Input.DueAt" type="date" class="form-control"/></div><div class="col-md-3"><label class="form-label">Отдаем</label><input asp-for="Input.SellAmount" class="form-control"/></div><div class="col-md-3"><label class="form-label">Валюта</label><select asp-for="Input.SellCurrency" asp-items="Model.Currencies" class="form-select"></select></div><div class="col-md-3"><label class="form-label">Получаем</label><input asp-for="Input.BuyAmount" class="form-control"/></div><div class="col-md-3"><label class="form-label">Валюта</label><select asp-for="Input.BuyCurrency" asp-items="Model.Currencies" class="form-select"></select></div><div class="col-md-3"><label class="form-label">Комиссия</label><input asp-for="Input.FeeAmount" class="form-control"/></div><div class="col-md-3"><label class="form-label">Валюта комиссии</label><select asp-for="Input.FeeCurrency" asp-items="Model.Currencies" class="form-select"></select></div><div class="col-md-6"><label class="form-label">Откуда получаем</label><select asp-for="Input.SourceAccount" asp-items="Model.Institutions" class="form-select"><option value="">Не выбран</option></select></div><div class="col-md-6"><label class="form-label">Откуда отправляем</label><select asp-for="Input.DestinationAccount" asp-items="Model.Institutions" class="form-select"><option value="">Не выбран</option></select></div><div class="col-md-4"><label class="form-label">Прибыль USD</label><input asp-for="Input.BaseCurrencyProfit" class="form-control"/></div><div class="col-md-8"><label class="form-label">Комментарий</label><input asp-for="Input.Note" class="form-control"/></div><div class="col-12"><button class="btn btn-primary">Сохранить изменения</button></div></div></form>
+
+<style>
+  .operation-panel{height:100%;border:1px solid #dfe5ef;border-radius:16px;padding:20px;background:#fff;box-shadow:0 4px 18px rgba(31,42,68,.05)}
+  .operation-panel.send{border-top:4px solid #f59f00}.operation-panel.receive{border-top:4px solid #2fb344}
+  .operation-panel h3{display:flex;align-items:center;gap:10px;margin:0 0 18px;font-size:18px}
+  .operation-panel .direction{display:inline-flex;width:30px;height:30px;align-items:center;justify-content:center;border-radius:50%;font-size:18px}
+  .operation-panel.send .direction{color:#b26a00;background:#fff4d6}.operation-panel.receive .direction{color:#178332;background:#e5f7e9}
+  .operation-summary{border:1px solid #ccd8f2;border-radius:16px;padding:20px;background:linear-gradient(135deg,#f7f9ff,#eef3ff)}
+  .operation-summary h3{margin:0 0 18px;font-size:18px;color:#1d3472}
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="mb-0">Редактирование операции</h1>
+  <a asp-page="Details" asp-route-id="@Model.Input.Id" class="btn btn-light">Отмена</a>
+</div>
+
+<form method="post" class="card card-body">
+  <input asp-for="Input.Id" type="hidden"/>
+  <div asp-validation-summary="ModelOnly" class="alert alert-danger"></div>
+  <div class="row g-3 mb-4">
+    <div class="col-md-6"><label class="form-label">Компания</label><select asp-for="Input.CompanyId" asp-items="Model.Companies" class="form-select"></select></div>
+    <div class="col-md-6"><label class="form-label">Клиент / партнёр</label><select asp-for="Input.CounterpartyId" asp-items="Model.Counterparties" class="form-select"><option value="">Без контрагента</option></select></div>
+    <div class="col-lg-6"><label class="form-label">Тип операции</label><select asp-for="Input.TypeCode" class="form-select">@foreach(var t in Model.Types){<option value="@t.Key">@t.Value</option>}</select></div>
+    <div class="col-md-3"><label class="form-label">Дата</label><input asp-for="Input.OccurredAt" type="date" class="form-control"/></div>
+    <div class="col-md-3"><label class="form-label">Срок расчёта</label><input asp-for="Input.DueAt" type="date" class="form-control"/></div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-6"><section class="operation-panel send"><h3><span class="direction">↑</span> Отдаём</h3><div class="row g-3">
+      <div class="col-md-7"><label class="form-label">Сумма</label><input asp-for="Input.SellAmount" class="form-control"/></div>
+      <div class="col-md-5"><label class="form-label">Валюта</label><select asp-for="Input.SellCurrency" asp-items="Model.Currencies" class="form-select"></select></div>
+      <div class="col-12"><label class="form-label">Откуда отправляем</label><select asp-for="Input.SourceAccount" asp-items="Model.Institutions" class="form-select"><option value="">Не выбран</option></select></div>
+    </div></section></div>
+    <div class="col-lg-6"><section class="operation-panel receive"><h3><span class="direction">↓</span> Получаем</h3><div class="row g-3">
+      <div class="col-md-7"><label class="form-label">Сумма</label><input asp-for="Input.BuyAmount" class="form-control"/></div>
+      <div class="col-md-5"><label class="form-label">Валюта</label><select asp-for="Input.BuyCurrency" asp-items="Model.Currencies" class="form-select"></select></div>
+      <div class="col-12"><label class="form-label">Куда получаем</label><select asp-for="Input.DestinationAccount" asp-items="Model.Institutions" class="form-select"><option value="">Не выбран</option></select></div>
+    </div></section></div>
+  </div>
+
+  <section class="operation-summary mt-4"><h3>Итог операции</h3><div class="row g-3">
+    <div class="col-md-6 col-xl-3"><label class="form-label">Комиссия</label><input asp-for="Input.FeeAmount" class="form-control"/></div>
+    <div class="col-md-6 col-xl-3"><label class="form-label">Валюта комиссии</label><select asp-for="Input.FeeCurrency" asp-items="Model.Currencies" class="form-select"></select></div>
+    <div class="col-md-6 col-xl-3"><label class="form-label">Курс комиссии к USD</label><input asp-for="Input.ExchangeRate" type="text" inputmode="decimal" class="form-control"/><div id="rate-hint" class="form-hint"></div></div>
+    <div class="col-md-6 col-xl-3"><label class="form-label">Прибыль USD</label><input asp-for="Input.BaseCurrencyProfit" class="form-control"/><div id="profit-hint" class="form-hint"></div><span asp-validation-for="Input.BaseCurrencyProfit" class="text-danger"></span></div>
+    <div class="col-12"><label class="form-label">Комментарий</label><textarea asp-for="Input.Note" class="form-control" rows="2"></textarea></div>
+  </div></section>
+  <div class="mt-4"><button class="btn btn-primary">Сохранить изменения</button></div>
+</form>
+
+<script>document.addEventListener('DOMContentLoaded',()=>{const fee=document.getElementById('Input_FeeAmount'),currency=document.getElementById('Input_FeeCurrency'),date=document.getElementById('Input_OccurredAt'),rate=document.getElementById('Input_ExchangeRate'),profit=document.getElementById('Input_BaseCurrencyProfit'),sell=document.getElementById('Input_SellAmount'),buy=document.getElementById('Input_BuyAmount'),rateHint=document.getElementById('rate-hint'),profitHint=document.getElementById('profit-hint');const number=v=>Number(String(v).replace(/[\s ]/g,'').replace(',','.'))||0,normalize=x=>x.value=number(x.value).toString();function calculate(){if(date.value<'2026-09-01'){profitHint.textContent='Для операций до 01.09.2026 действует исторический расчёт';return;}profit.value=(number(fee.value)*number(rate.value)).toFixed(2);profitHint.textContent='Комиссия × курс к USD; прибыль можно изменить';}async function load(){const q=new URLSearchParams({handler:'ProfitRate',currency:currency.value,date:date.value});const d=await(await fetch('?'+q)).json();rate.value=d.found?Number(d.rate).toFixed(8):'0';rateHint.textContent=d.found?'Курс из справочника на дату операции':'Курс не найден — укажите вручную';calculate();}[currency,date].forEach(x=>x.addEventListener('change',load));[fee,rate].forEach(x=>x.addEventListener('input',calculate));rate.form.addEventListener('submit',()=>[sell,buy,fee,rate,profit].forEach(normalize));load();});</script>

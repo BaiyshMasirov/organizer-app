@@ -14,6 +14,7 @@ public sealed class FinanceDbContext(DbContextOptions<FinanceDbContext> options,
     public DbSet<Settlement> Settlements => Set<Settlement>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
+    public DbSet<NbkrExchangeRate> NbkrExchangeRates => Set<NbkrExchangeRate>();
     public DbSet<MonthlyCurrencyResult> MonthlyCurrencyResults => Set<MonthlyCurrencyResult>();
     public DbSet<MonthlyPurchaseTotal> MonthlyPurchaseTotals => Set<MonthlyPurchaseTotal>();
     public DbSet<MonthlySaleTotal> MonthlySaleTotals => Set<MonthlySaleTotal>();
@@ -52,6 +53,9 @@ public sealed class FinanceDbContext(DbContextOptions<FinanceDbContext> options,
         b.Entity<ExchangeRate>().HasIndex(x => new { x.Currency, x.EffectiveAt });
         b.Entity<ExchangeRate>().HasIndex(x => x.ImportKey).IsUnique();
         b.Entity<ExchangeRate>().Property(x => x.RateToUsd).HasPrecision(30,15);
+        b.Entity<NbkrExchangeRate>().HasIndex(x => new { x.Currency, x.EffectiveAt }).IsUnique();
+        b.Entity<NbkrExchangeRate>().Property(x => x.Nominal).HasPrecision(30,15);
+        b.Entity<NbkrExchangeRate>().Property(x => x.ValueInKgs).HasPrecision(30,15);
         b.Entity<MonthlyCurrencyResult>().HasIndex(x => new { x.Period, x.Currency }).IsUnique();
         b.Entity<MonthlyCurrencyResult>().HasIndex(x => x.ImportKey).IsUnique();
         b.Entity<MonthlyPurchaseTotal>().HasIndex(x=>x.ImportKey).IsUnique();

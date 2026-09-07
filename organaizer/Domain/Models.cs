@@ -143,6 +143,18 @@ public sealed class ExchangeRate
     [MaxLength(300)] public string? ImportKey { get; set; }
 }
 
+public sealed class NbkrExchangeRate
+{
+    public Guid Id { get; set; }
+    [MaxLength(5)] public required string Currency { get; set; }
+    public DateTimeOffset EffectiveAt { get; set; }
+    public decimal Nominal { get; set; }
+    /// <summary>Стоимость указанного номинала валюты в кыргызских сомах.</summary>
+    public decimal ValueInKgs { get; set; }
+    [MaxLength(20)] public required string Feed { get; set; }
+    public DateTimeOffset SyncedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 public sealed class MonthlyCurrencyResult
 {
     public Guid Id { get; set; }
