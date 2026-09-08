@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using organaizer.Domain;
 
 namespace organaizer.Infrastructure;
@@ -10,8 +11,11 @@ public static class SeedData
     {
         await db.Database.MigrateAsync();
         const string adminRole = "Administrator";
+        const string superAdminRole = AppPermissions.SuperAdminRole;
         if (!await roles.RoleExistsAsync(adminRole))
             await EnsureSucceeded(roles.CreateAsync(new IdentityRole(adminRole)));
+        if (!await roles.RoleExistsAsync(superAdminRole))
+            await EnsureSucceeded(roles.CreateAsync(new IdentityRole(superAdminRole)));
         var admin = await users.FindByNameAsync("admin");
         if (admin is null)
         {
@@ -20,6 +24,17 @@ public static class SeedData
         }
         if (!await users.IsInRoleAsync(admin, adminRole))
             await EnsureSucceeded(users.AddToRoleAsync(admin, adminRole));
+        var adminClaims = await users.GetClaimsAsync(admin);
+        foreach (var permission in AppPermissions.All.Where(x => !adminClaims.Any(c => c.Type == AppPermissions.ClaimType && c.Value == x)))
+            await EnsureSucceeded(users.AddClaimAsync(admin, new Claim(AppPermissions.ClaimType, permission)));
+        var superAdmin = await users.FindByNameAsync("superadmin");
+        if (superAdmin is null)
+        {
+            superAdmin = new IdentityUser { UserName = "superadmin", Email = "superadmin@local", EmailConfirmed = true };
+            await EnsureSucceeded(users.CreateAsync(superAdmin, "12345678"));
+        }
+        if (!await users.IsInRoleAsync(superAdmin, superAdminRole))
+            await EnsureSucceeded(users.AddToRoleAsync(superAdmin, superAdminRole));
         if (!await db.Companies.AnyAsync())
         {
             var broker = new Company { Id=Guid.NewGuid(), Name="Кыргызстан — Криптообменник", Kind=CompanyKind.Broker };

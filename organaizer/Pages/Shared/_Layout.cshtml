@@ -5,6 +5,19 @@
   var sectionTitle = page.StartsWith("/Balance") ? "Баланс" : page.StartsWith("/Operations") ? "Операции" : page.StartsWith("/Expenses") ? "Расходы" : page.StartsWith("/OrientExchangeRates") ? "Курсы НБКР" : page.StartsWith("/ExchangeRates") ? "Курсы валют" : page.StartsWith("/Clients") ? "Клиенты" : page.StartsWith("/Currencies") ? "Валюты" : page.StartsWith("/Institutions") ? "Банки и каналы" : page.StartsWith("/Reports") ? "Отчеты" : "Обзор";
   var sectionPage = page.StartsWith("/Balance") ? "/Balance/Index" : page.StartsWith("/Operations") ? "/Operations/Index" : page.StartsWith("/Expenses") ? "/Expenses/Index" : page.StartsWith("/OrientExchangeRates") ? "/OrientExchangeRates/Index" : page.StartsWith("/ExchangeRates") ? "/ExchangeRates/Index" : page.StartsWith("/Clients") ? "/Clients/Index" : page.StartsWith("/Currencies") ? "/Currencies/Index" : page.StartsWith("/Institutions") ? "/Institutions/Index" : page.StartsWith("/Reports") ? "/Reports/Index" : "/Index";
   var isSectionIndex = page == sectionPage || page == "/Index";
+  var canDashboard = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.Dashboard.View);
+  var canOperations = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.Operations.View);
+  var canBalance = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.Balance.View);
+  var canClients = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.Clients.View);
+  var canCurrencies = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.Currencies.View);
+  var canInstitutions = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.Institutions.View);
+  var canExpenses = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.Expenses.View);
+  var canExchangeRates = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.ExchangeRates.View);
+  var canOrientRates = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.OrientRates.View);
+  var canReports = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.Reports.View);
+  var canAnalytics = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.Analytics.View);
+  var canExecutive = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.Executive.View);
+  var isSuperAdmin = await Permissions.IsSuperAdminAsync(User);
 }
 <!doctype html><html lang="ru"><head>
   <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><meta name="color-scheme" content="light"/>
@@ -17,18 +30,21 @@
   <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu"><span class="navbar-toggler-icon"></span></button>
   <h1 class="navbar-brand navbar-brand-autodark"><a asp-page="/Index" class="brand-lockup"><span class="brand-mark">F</span><span>Finance <b>Flow</b><small>LIQUIDITY CONTROL</small></span></a></h1>
   <div class="collapse navbar-collapse" id="sidebar-menu"><ul class="navbar-nav pt-lg-3">
-    <li class="nav-item @(page=="/Index"?"active":"")"><a class="nav-link" asp-page="/Index"><span class="nav-link-icon">⌂</span><span class="nav-link-title">Обзор</span></a></li>
-    <li class="nav-item @(page.StartsWith("/Operations")?"active":"")"><a class="nav-link" asp-page="/Operations/Index"><span class="nav-link-icon">⇄</span><span class="nav-link-title">Операции</span></a></li>
+    @if(canDashboard){<li class="nav-item @(page=="/Index"?"active":"")"><a class="nav-link" asp-page="/Index"><span class="nav-link-icon">⌂</span><span class="nav-link-title">Обзор</span></a></li>}
+    @if(canOperations){<li class="nav-item @(page.StartsWith("/Operations")?"active":"")"><a class="nav-link" asp-page="/Operations/Index"><span class="nav-link-icon">⇄</span><span class="nav-link-title">Операции</span></a></li>}
     <li class="nav-section">УЧЕТ</li>
-    <li class="nav-item @(page.StartsWith("/Balance")?"active":"")"><a class="nav-link" asp-page="/Balance/Index"><span class="nav-link-icon">▣</span><span class="nav-link-title">Баланс</span></a></li>
-    <li class="nav-item @(page.StartsWith("/Clients")?"active":"")"><a class="nav-link" asp-page="/Clients/Index"><span class="nav-link-icon">◎</span><span class="nav-link-title">Клиенты</span></a></li>
-    <li class="nav-item @(page.StartsWith("/Currencies")?"active":"")"><a class="nav-link" asp-page="/Currencies/Index"><span class="nav-link-icon">¤</span><span class="nav-link-title">Валюты</span></a></li>
-    <li class="nav-item @(page.StartsWith("/Institutions")?"active":"")"><a class="nav-link" asp-page="/Institutions/Index"><span class="nav-link-icon">▦</span><span class="nav-link-title">Банки и каналы</span></a></li>
-    <li class="nav-item @(page.StartsWith("/Expenses")?"active":"")"><a class="nav-link" asp-page="/Expenses/Index"><span class="nav-link-icon">↘</span><span class="nav-link-title">Расходы</span></a></li>
-    <li class="nav-item @(page.StartsWith("/ExchangeRates")?"active":"")"><a class="nav-link" asp-page="/ExchangeRates/Index"><span class="nav-link-icon">$</span><span class="nav-link-title">Курсы валют</span></a></li>
-    @if(activeCompany?.Kind==organaizer.Domain.CompanyKind.Broker){<li class="nav-item @(page.StartsWith("/OrientExchangeRates")?"active":"")"><a class="nav-link" asp-page="/OrientExchangeRates/Index"><span class="nav-link-icon">₭</span><span class="nav-link-title">Курсы НБКР</span></a></li>}
-    <li class="nav-section">АНАЛИТИКА</li><li class="nav-item @(page.StartsWith("/Reports")?"active":"")"><a class="nav-link" asp-page="/Reports/Index"><span class="nav-link-icon">▥</span><span class="nav-link-title">Промежуточный отчет</span></a></li>
-    <li class="nav-item"><a class="nav-link" href="http://@Context.Request.Host.Host:5045" target="_blank"><span class="nav-link-icon">◒</span><span class="nav-link-title">Диаграммы и итоги</span></a></li>
+    @if(canBalance){<li class="nav-item @(page.StartsWith("/Balance")?"active":"")"><a class="nav-link" asp-page="/Balance/Index"><span class="nav-link-icon">▣</span><span class="nav-link-title">Баланс</span></a></li>}
+    @if(canClients){<li class="nav-item @(page.StartsWith("/Clients")?"active":"")"><a class="nav-link" asp-page="/Clients/Index"><span class="nav-link-icon">◎</span><span class="nav-link-title">Клиенты</span></a></li>}
+    @if(canCurrencies){<li class="nav-item @(page.StartsWith("/Currencies")?"active":"")"><a class="nav-link" asp-page="/Currencies/Index"><span class="nav-link-icon">¤</span><span class="nav-link-title">Валюты</span></a></li>}
+    @if(canInstitutions){<li class="nav-item @(page.StartsWith("/Institutions")?"active":"")"><a class="nav-link" asp-page="/Institutions/Index"><span class="nav-link-icon">▦</span><span class="nav-link-title">Банки и каналы</span></a></li>}
+    @if(canExpenses){<li class="nav-item @(page.StartsWith("/Expenses")?"active":"")"><a class="nav-link" asp-page="/Expenses/Index"><span class="nav-link-icon">↘</span><span class="nav-link-title">Расходы</span></a></li>}
+    @if(canExchangeRates){<li class="nav-item @(page.StartsWith("/ExchangeRates")?"active":"")"><a class="nav-link" asp-page="/ExchangeRates/Index"><span class="nav-link-icon">$</span><span class="nav-link-title">Курсы валют</span></a></li>}
+    @if(canOrientRates&&activeCompany?.Kind==organaizer.Domain.CompanyKind.Broker){<li class="nav-item @(page.StartsWith("/OrientExchangeRates")?"active":"")"><a class="nav-link" asp-page="/OrientExchangeRates/Index"><span class="nav-link-icon">₭</span><span class="nav-link-title">Курсы НБКР</span></a></li>}
+    @if(canReports||canAnalytics||canExecutive){<li class="nav-section">АНАЛИТИКА</li>}
+    @if(canReports){<li class="nav-item @(page.StartsWith("/Reports")?"active":"")"><a class="nav-link" asp-page="/Reports/Index"><span class="nav-link-icon">▥</span><span class="nav-link-title">Промежуточный отчет</span></a></li>}
+    @if(canAnalytics){<li class="nav-item"><a class="nav-link" href="http://@Context.Request.Host.Host:5045" target="_blank"><span class="nav-link-icon">◒</span><span class="nav-link-title">Диаграммы и итоги</span></a></li>}
+    @if(canExecutive){<li class="nav-item @(page.StartsWith("/Executive")?"active":"")"><a class="nav-link" asp-page="/Executive/Index"><span class="nav-link-icon">◆</span><span class="nav-link-title">Для руководителя</span></a></li>}
+    @if(isSuperAdmin){<li class="nav-section">АДМИНИСТРИРОВАНИЕ</li><li class="nav-item @(page.StartsWith("/Users")?"active":"")"><a class="nav-link" asp-page="/Users/Index"><span class="nav-link-icon">⚙</span><span class="nav-link-title">Пользователи и права</span></a></li>}
   </ul></div>
   <div class="sidebar-footer"><div class="company-chip"><span class="status-dot status-dot-animated bg-green"></span><div><strong>Система работает</strong><small>PostgreSQL · CQRS</small></div></div></div>
 </div></aside>

@@ -14,6 +14,9 @@ builder.Services.AddDbContext<FinanceDbContext>(o => o.UseNpgsql(builder.Configu
 builder.Services.AddIdentity<IdentityUser, IdentityRole>(options =>
 {
     options.Password.RequiredLength = 8;
+    options.Password.RequireUppercase = false;
+    options.Password.RequireLowercase = false;
+    options.Password.RequireNonAlphanumeric = false;
     options.User.RequireUniqueEmail = false;
 }).AddEntityFrameworkStores<FinanceDbContext>().AddDefaultTokenProviders();
 builder.Services.ConfigureApplicationCookie(options =>
@@ -26,6 +29,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 builder.Services.AddAuthorization(options => options.FallbackPolicy = options.DefaultPolicy);
 builder.Services.AddScoped<Dispatcher>();
 builder.Services.AddScoped<ActiveCompany>();
+builder.Services.AddScoped<PermissionService>();
 builder.Services.AddHttpClient("nbkr", c => { c.BaseAddress = new Uri("https://www.nbkr.kg/"); c.Timeout = TimeSpan.FromSeconds(30); });
 builder.Services.AddScoped<NbkrRateService>();
 builder.Services.AddHostedService<NbkrRateSyncWorker>();
@@ -75,6 +79,8 @@ app.Use(async (context, next) =>
     }
     await next();
 });
+
+app.UseMiddleware<PermissionMiddleware>();
 
 app.MapRazorPages();
 
