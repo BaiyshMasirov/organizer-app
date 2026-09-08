@@ -64,9 +64,14 @@ public sealed class PermissionService(FinanceDbContext db)
         _isSuperAdmin = false;
         if (string.IsNullOrWhiteSpace(id)) return;
         if (await db.Users.AsNoTracking().AnyAsync(x => x.Id == id && x.LockoutEnd > DateTimeOffset.UtcNow)) return;
-        _permissions = (await db.UserClaims.AsNoTracking()
+        var directPermissions = await db.UserClaims.AsNoTracking()
             .Where(x => x.UserId == id && x.ClaimType == AppPermissions.ClaimType && x.ClaimValue != null)
-            .Select(x => x.ClaimValue!).ToListAsync()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .Select(x => x.ClaimValue!).ToListAsync();
+        var rolePermissions = await (from ur in db.UserRoles.AsNoTracking()
+                                     join claim in db.RoleClaims.AsNoTracking() on ur.RoleId equals claim.RoleId
+                                     where ur.UserId == id && claim.ClaimType == AppPermissions.ClaimType && claim.ClaimValue != null
+                                     select claim.ClaimValue!).ToListAsync();
+        _permissions = directPermissions.Concat(rolePermissions).ToHashSet(StringComparer.OrdinalIgnoreCase);
         _isSuperAdmin = await (from ur in db.UserRoles.AsNoTracking()
                                join role in db.Roles.AsNoTracking() on ur.RoleId equals role.Id
                                where ur.UserId == id && role.Name == AppPermissions.SuperAdminRole

@@ -83,6 +83,11 @@ public static class ExecutiveDashboard
     {
         if (string.IsNullOrWhiteSpace(userId)) return false;
         var super = await (from ur in db.UserRoles.AsNoTracking() join role in db.Roles.AsNoTracking() on ur.RoleId equals role.Id where ur.UserId == userId && role.Name == AppPermissions.SuperAdminRole select ur).AnyAsync();
-        return super || await db.UserClaims.AsNoTracking().AnyAsync(x => x.UserId == userId && x.ClaimType == AppPermissions.ClaimType && x.ClaimValue == AppPermissions.Executive.View);
+        var direct = await db.UserClaims.AsNoTracking().AnyAsync(x => x.UserId == userId && x.ClaimType == AppPermissions.ClaimType && x.ClaimValue == AppPermissions.Executive.View);
+        var rolePermission = await (from ur in db.UserRoles.AsNoTracking()
+                                    join claim in db.RoleClaims.AsNoTracking() on ur.RoleId equals claim.RoleId
+                                    where ur.UserId == userId && claim.ClaimType == AppPermissions.ClaimType && claim.ClaimValue == AppPermissions.Executive.View
+                                    select claim).AnyAsync();
+        return super || direct || rolePermission;
     }
 }

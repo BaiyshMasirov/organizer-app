@@ -39,7 +39,7 @@ static async Task<bool> HasAnalyticsAccess(FinanceDbContext db,string? userId)
  if(string.IsNullOrWhiteSpace(userId))return false;
  if(await db.Users.AsNoTracking().AnyAsync(x=>x.Id==userId&&x.LockoutEnd>DateTimeOffset.UtcNow))return false;
  var super=await(from ur in db.UserRoles.AsNoTracking() join role in db.Roles.AsNoTracking() on ur.RoleId equals role.Id where ur.UserId==userId&&role.Name==AppPermissions.SuperAdminRole select ur).AnyAsync();
- return super||await db.UserClaims.AsNoTracking().AnyAsync(x=>x.UserId==userId&&x.ClaimType==AppPermissions.ClaimType&&x.ClaimValue==AppPermissions.Analytics.View);
+ return super||await HasPermission(db,userId,AppPermissions.Analytics.View);
 }
 
 static async Task<bool> HasAnyAnalyticsAccess(FinanceDbContext db,string? userId)
@@ -47,5 +47,11 @@ static async Task<bool> HasAnyAnalyticsAccess(FinanceDbContext db,string? userId
  if(string.IsNullOrWhiteSpace(userId))return false;
  if(await db.Users.AsNoTracking().AnyAsync(x=>x.Id==userId&&x.LockoutEnd>DateTimeOffset.UtcNow))return false;
  var super=await(from ur in db.UserRoles.AsNoTracking() join role in db.Roles.AsNoTracking() on ur.RoleId equals role.Id where ur.UserId==userId&&role.Name==AppPermissions.SuperAdminRole select ur).AnyAsync();
- return super||await db.UserClaims.AsNoTracking().AnyAsync(x=>x.UserId==userId&&x.ClaimType==AppPermissions.ClaimType&&(x.ClaimValue==AppPermissions.Analytics.View||x.ClaimValue==AppPermissions.Executive.View));
+ return super||await HasPermission(db,userId,AppPermissions.Analytics.View,AppPermissions.Executive.View);
+}
+
+static async Task<bool> HasPermission(FinanceDbContext db,string userId,params string[] permissions)
+{
+ var direct=await db.UserClaims.AsNoTracking().AnyAsync(x=>x.UserId==userId&&x.ClaimType==AppPermissions.ClaimType&&permissions.Contains(x.ClaimValue!));
+ return direct||await(from ur in db.UserRoles.AsNoTracking() join claim in db.RoleClaims.AsNoTracking() on ur.RoleId equals claim.RoleId where ur.UserId==userId&&claim.ClaimType==AppPermissions.ClaimType&&permissions.Contains(claim.ClaimValue!) select claim).AnyAsync();
 }
