@@ -1,0 +1,27 @@
+@page
+@model organaizer.Pages.Balance.HistoryModel
+@{ ViewData["Title"] = "История движений"; }
+
+<div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+  <div><h1 class="mb-1">История движений</h1><div class="text-secondary">@Model.AccountTitle</div></div>
+  <a asp-page="/Balance/Index" class="btn btn-outline-secondary">← К балансу</a>
+</div>
+
+<form method="get" class="card card-body mb-4">
+  @if(Model.AccountId.HasValue){<input type="hidden" asp-for="AccountId" />}
+  <div class="row g-3 align-items-end">
+    <div class="col-md-3"><label class="form-label">Тип операции</label><select asp-for="Type" class="form-select"><option value="">Все типы</option>@foreach(var type in Model.Types){<option value="@type">@type</option>}</select></div>
+    <div class="col-md-2"><label class="form-label">Дата с</label><input asp-for="From" type="date" class="form-control" /></div>
+    <div class="col-md-2"><label class="form-label">Дата по</label><input asp-for="To" type="date" class="form-control" /></div>
+    <div class="col-md-2"><label class="form-label">Валюта</label><select asp-for="Currency" class="form-select"><option value="">Все валюты</option>@foreach(var currency in Model.Currencies){<option value="@currency">@currency</option>}</select></div>
+    <div class="col-md-3"><div class="d-flex gap-2"><button class="btn btn-primary flex-fill" type="submit">Показать</button><a asp-page="/Balance/History" asp-route-accountId="@Model.AccountId" class="btn btn-outline-secondary">Сбросить</a></div></div>
+  </div>
+</form>
+
+<div class="card">
+  <div class="card-header"><div class="card-title">Найдено движений: @Model.Items.Count</div></div>
+  <div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>Дата</th><th>Счёт</th><th>Тип операции</th><th>Описание</th><th>Валюта</th><th class="text-end">Движение</th><th class="text-end">Остаток</th></tr></thead><tbody>
+  @foreach(var x in Model.Items){<tr><td class="text-nowrap">@organaizer.Pages.Balance.HistoryModel.LocalDate(x.OccurredAt)</td><td><strong>@x.Account</strong></td><td><span class="badge bg-azure-lt">@x.Type</span></td><td>@(string.IsNullOrWhiteSpace(x.Description) ? "—" : x.Description)</td><td><span class="badge bg-indigo-lt">@x.Currency</span></td><td class="text-end fw-semibold @(x.Amount<0?"text-danger":"text-success")">@(x.Amount>0?"+":"")@x.Amount.ToString("N2") @x.Currency</td><td class="text-end fw-bold @(x.Balance<0?"text-danger":"")">@x.Balance.ToString("N2") @x.Currency</td></tr>}
+  @if(Model.Items.Count==0){<tr><td colspan="7" class="empty-state">По заданным фильтрам движений не найдено</td></tr>}
+  </tbody></table></div>
+</div>
