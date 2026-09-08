@@ -9,7 +9,7 @@ public sealed class IndexModel(UserManager<IdentityUser> users, RoleManager<Iden
 {
     public sealed record UserRow(string Id, string UserName, bool IsActive, bool IsSuperAdmin, List<string> Roles);
     public sealed record RoleRow(string Id, string Name, int UserCount, int PermissionCount, bool IsSystem);
-    [BindProperty(SupportsGet = true)] public string Tab { get; set; } = "users";
+    [BindProperty(SupportsGet = true)] public string? Tab { get; set; }
     [BindProperty(SupportsGet = true)] public string? Search { get; set; }
     [TempData] public string? Message { get; set; }
     public List<UserRow> UserItems { get; private set; } = [];
@@ -18,9 +18,11 @@ public sealed class IndexModel(UserManager<IdentityUser> users, RoleManager<Iden
 
     public async Task OnGetAsync() => await LoadAsync();
 
-    public async Task<IActionResult> OnPostCreateUserAsync(string username, string password, bool isActive, string[] selectedRoles)
+    public async Task<IActionResult> OnPostCreateUserAsync(string? username, string? password, bool isActive, string[]? selectedRoles)
     {
-        username = username.Trim();
+        username = username?.Trim() ?? "";
+        password ??= "";
+        selectedRoles ??= [];
         if (string.IsNullOrWhiteSpace(username)) ModelState.AddModelError(string.Empty, "Укажите логин.");
         if (password.Length < 8) ModelState.AddModelError(string.Empty, "Пароль должен содержать минимум 8 символов.");
         if (await users.FindByNameAsync(username) is not null) ModelState.AddModelError(string.Empty, "Пользователь с таким логином уже существует.");
@@ -35,9 +37,9 @@ public sealed class IndexModel(UserManager<IdentityUser> users, RoleManager<Iden
         return RedirectToPage(new { tab = "users" });
     }
 
-    public async Task<IActionResult> OnPostCreateRoleAsync(string roleName)
+    public async Task<IActionResult> OnPostCreateRoleAsync(string? roleName)
     {
-        roleName = roleName.Trim();
+        roleName = roleName?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(roleName)) ModelState.AddModelError(string.Empty, "Укажите наименование роли.");
         if (string.Equals(roleName, AppPermissions.SuperAdminRole, StringComparison.OrdinalIgnoreCase) || await roles.RoleExistsAsync(roleName)) ModelState.AddModelError(string.Empty, "Роль с таким наименованием уже существует.");
         if (!ModelState.IsValid) { Tab = "roles"; await LoadAsync(); return Page(); }
