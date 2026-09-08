@@ -53,6 +53,7 @@ public sealed class UpdateOperationHandler(FinanceDbContext db) : ICommandHandle
         if (!OperationTypes.All.ContainsKey(c.TypeCode)) throw new ArgumentException("Неизвестный тип операции");
         if (c.SellAmount <= 0 || c.BuyAmount <= 0) throw new ArgumentException("Суммы должны быть больше нуля");
         var op = await db.Operations.SingleAsync(x => x.Id == c.Id, ct);
+        var settlements = await db.Settlements.Where(x => x.OperationId == c.Id).ToListAsync(ct);
         op.CompanyId=c.CompanyId; op.CounterpartyId=c.CounterpartyId; op.TypeCode=c.TypeCode;
         op.OccurredAt=c.OccurredAt.ToUniversalTime(); op.DueAt=c.DueAt?.ToUniversalTime();
         op.SellCurrency=c.SellCurrency.ToUpperInvariant(); op.SellAmount=c.SellAmount;
@@ -60,8 +61,51 @@ public sealed class UpdateOperationHandler(FinanceDbContext db) : ICommandHandle
         op.FeeAmount=c.FeeAmount; op.FeeCurrency=c.FeeCurrency.ToUpperInvariant();
         op.BaseCurrencyProfit=c.BaseCurrencyProfit; op.ExchangeRate=c.ExchangeRate; op.Status=c.Status; op.SourceAccount=c.SourceAccount;
         op.DestinationAccount=c.DestinationAccount; op.Note=c.Note;
+
+        await SyncSettlementAsync(settlements.Where(x => x.Amount < 0).ToList(), c.SourceAccount,
+            c.SellCurrency, -c.SellAmount, "Списание по операции");
+        await SyncSettlementAsync(settlements.Where(x => x.Amount > 0).ToList(), c.DestinationAccount,
+            c.BuyCurrency, c.BuyAmount, "Зачисление по операции");
         await db.SaveChangesAsync(ct);
         return true;
+
+        async Task SyncSettlementAsync(List<Settlement> direction, string? accountName,
+            string currency, decimal amount, string note)
+        {
+            // More than one row means a genuine partial settlement. Do not collapse it
+            // into a single payment when only the operation header is edited.
+            if (direction.Count > 1) return;
+
+            var settlement = direction.SingleOrDefault();
+            Guid? accountId = settlement?.AccountId;
+            if (!string.IsNullOrWhiteSpace(accountName))
+            {
+                var resolved = await db.Accounts.AsNoTracking()
+                    .Where(x => x.CompanyId == c.CompanyId && x.Currency == currency &&
+                        (x.Name == accountName || x.FinancialInstitution!.Name == accountName))
+                    .Select(x => (Guid?)x.Id)
+                    .FirstOrDefaultAsync(ct);
+                if (resolved.HasValue) accountId = resolved;
+            }
+
+            if (settlement is null)
+            {
+                if (!accountId.HasValue) return;
+                db.Settlements.Add(new Settlement
+                {
+                    Id = Guid.NewGuid(), OperationId = c.Id, AccountId = accountId.Value,
+                    OccurredAt = c.OccurredAt.ToUniversalTime(), Amount = amount,
+                    Currency = currency.ToUpperInvariant(), Note = note
+                });
+                return;
+            }
+
+            if (accountId.HasValue) settlement.AccountId = accountId.Value;
+            settlement.OccurredAt = c.OccurredAt.ToUniversalTime();
+            settlement.Amount = amount;
+            settlement.Currency = currency.ToUpperInvariant();
+            settlement.Note = note;
+        }
     }
 }
 
