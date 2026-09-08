@@ -12,6 +12,7 @@
   .operation-summary h3{margin:0 0 18px;font-size:18px;color:#1d3472}
   .balance-confirm-overlay{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(15,23,42,.55)}
   .balance-confirm-dialog{width:min(440px,100%)}
+  #operation-form>.alert-danger:empty,#operation-form>.validation-summary-valid{display:none}
 </style>
 
 <div class="d-flex justify-content-between align-items-start mb-4">
@@ -20,7 +21,7 @@
 </div>
 
 <form method="post" class="card card-body" id="operation-form" data-copy="@Model.IsCopy.ToString().ToLowerInvariant()">
-  @if(!ViewData.ModelState.IsValid){<div asp-validation-summary="All" class="alert alert-danger"></div>}
+  @if(ViewData.ModelState.ErrorCount>0){<div asp-validation-summary="All" class="alert alert-danger"></div>}
   <input asp-for="Input.SellCurrency" type="hidden"/>
   <input asp-for="Input.BuyCurrency" type="hidden"/>
   <div class="row g-3 mb-4">
