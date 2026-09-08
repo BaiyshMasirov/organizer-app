@@ -35,6 +35,7 @@ public static class SeedData
         }
         if (!await users.IsInRoleAsync(superAdmin, superAdminRole))
             await EnsureSucceeded(users.AddToRoleAsync(superAdmin, superAdminRole));
+        await EnsureNbkrBaselineAsync(db);
         if (!await db.Companies.AnyAsync())
         {
             var broker = new Company { Id=Guid.NewGuid(), Name="Кыргызстан — Криптообменник", Kind=CompanyKind.Broker };
@@ -62,6 +63,33 @@ public static class SeedData
         liquidityCompany.Name = "A&A Liquidity";
         await AddClients(db, brokerCompany.Id, SeedCatalog.BrokerClients);
         await AddClients(db, liquidityCompany.Id, SeedCatalog.LiquidityClients);
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureNbkrBaselineAsync(FinanceDbContext db)
+    {
+        // Official NBKR rates effective on 08.09.2026. Keep a local baseline because
+        // the NBKR host can be temporarily unreachable from the production server.
+        var effectiveAt = new DateTimeOffset(2026, 9, 8, 0, 0, 0, TimeSpan.Zero);
+        var officialRates = new[]
+        {
+            new { Currency = "USD", Nominal = 1m, ValueInKgs = 87.4500m, Feed = "daily" },
+            new { Currency = "AED", Nominal = 1m, ValueInKgs = 23.8112m, Feed = "weekly" }
+        };
+        var existing = await db.NbkrExchangeRates
+            .Where(x => x.EffectiveAt == effectiveAt)
+            .Select(x => x.Currency)
+            .ToListAsync();
+        foreach (var rate in officialRates.Where(x => !existing.Contains(x.Currency)))
+            db.NbkrExchangeRates.Add(new NbkrExchangeRate
+            {
+                Id = Guid.NewGuid(),
+                Currency = rate.Currency,
+                EffectiveAt = effectiveAt,
+                Nominal = rate.Nominal,
+                ValueInKgs = rate.ValueInKgs,
+                Feed = rate.Feed
+            });
         await db.SaveChangesAsync();
     }
 

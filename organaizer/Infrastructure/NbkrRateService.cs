@@ -65,7 +65,16 @@ public sealed class NbkrRateService(IHttpClientFactory clients, IServiceScopeFac
         }
         var currencyKgs = await KgsPerUnit(currency);
         var usdKgs = await KgsPerUnit("USD");
-        return currencyKgs.HasValue && usdKgs > 0 ? currencyKgs / usdKgs : null;
+        if (currencyKgs.HasValue && usdKgs > 0) return currencyKgs / usdKgs;
+
+        // Do not break operation entry when the NBKR endpoint is unavailable.
+        // Historical imports already contain a direct currency-to-USD rate.
+        return await db.ExchangeRates.AsNoTracking()
+            .Where(x => x.Currency == currency && x.EffectiveAt < end && x.RateToUsd > 0 && x.RateToUsd < 2)
+            .OrderByDescending(x => x.EffectiveAt)
+            .ThenByDescending(x => x.SourceOrder)
+            .Select(x => (decimal?)x.RateToUsd)
+            .FirstOrDefaultAsync(ct);
     }
 }
 
