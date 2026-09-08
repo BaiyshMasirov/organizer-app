@@ -16,7 +16,6 @@
   var canOrientRates = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.OrientRates.View);
   var canReports = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.Reports.View);
   var canAnalytics = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.Analytics.View);
-  var canExecutive = await Permissions.HasAsync(User, organaizer.Infrastructure.AppPermissions.Executive.View);
   var isSuperAdmin = await Permissions.IsSuperAdminAsync(User);
 }
 <!doctype html><html lang="ru"><head>
@@ -40,10 +39,9 @@
     @if(canExpenses){<li class="nav-item @(page.StartsWith("/Expenses")?"active":"")"><a class="nav-link" asp-page="/Expenses/Index"><span class="nav-link-icon">↘</span><span class="nav-link-title">Расходы</span></a></li>}
     @if(canExchangeRates){<li class="nav-item @(page.StartsWith("/ExchangeRates")?"active":"")"><a class="nav-link" asp-page="/ExchangeRates/Index"><span class="nav-link-icon">$</span><span class="nav-link-title">Курсы валют</span></a></li>}
     @if(canOrientRates&&activeCompany?.Kind==organaizer.Domain.CompanyKind.Broker){<li class="nav-item @(page.StartsWith("/OrientExchangeRates")?"active":"")"><a class="nav-link" asp-page="/OrientExchangeRates/Index"><span class="nav-link-icon">₭</span><span class="nav-link-title">Курсы НБКР</span></a></li>}
-    @if(canReports||canAnalytics||canExecutive){<li class="nav-section">АНАЛИТИКА</li>}
+    @if(canReports||canAnalytics){<li class="nav-section">АНАЛИТИКА</li>}
     @if(canReports){<li class="nav-item @(page.StartsWith("/Reports")?"active":"")"><a class="nav-link" asp-page="/Reports/Index"><span class="nav-link-icon">▥</span><span class="nav-link-title">Промежуточный отчет</span></a></li>}
     @if(canAnalytics){<li class="nav-item"><a class="nav-link" href="http://@Context.Request.Host.Host:5045" target="_blank"><span class="nav-link-icon">◒</span><span class="nav-link-title">Диаграммы и итоги</span></a></li>}
-    @if(canExecutive){<li class="nav-item @(page.StartsWith("/Executive")?"active":"")"><a class="nav-link" asp-page="/Executive/Index"><span class="nav-link-icon">◆</span><span class="nav-link-title">Для руководителя</span></a></li>}
     @if(isSuperAdmin){<li class="nav-section">АДМИНИСТРИРОВАНИЕ</li><li class="nav-item @(page.StartsWith("/Users")?"active":"")"><a class="nav-link" asp-page="/Users/Index"><span class="nav-link-icon">⚙</span><span class="nav-link-title">Пользователи и права</span></a></li>}
   </ul></div>
   <div class="sidebar-footer"><div class="company-chip"><span class="status-dot status-dot-animated bg-green"></span><div><strong>Система работает</strong><small>PostgreSQL · CQRS</small></div></div></div>

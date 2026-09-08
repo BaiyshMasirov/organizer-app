@@ -11,6 +11,8 @@ namespace organaizer.Pages.Balance;
 public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : PageModel
 {
     public List<MoneyAccount> Items { get; private set; } = [];
+    public List<MoneyAccount> AllItems { get; private set; } = [];
+    public List<string> FilterCurrencies { get; private set; } = [];
     public List<SelectListItem> Institutions { get; private set; } = [];
     public List<SelectListItem> Currencies { get; private set; } = [];
     public Dictionary<Guid, decimal> Balances { get; private set; } = [];
@@ -19,6 +21,12 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
 
     [BindProperty]
     public InputModel Input { get; set; } = new();
+
+    [BindProperty(SupportsGet = true)]
+    public string? Search { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public string? Currency { get; set; }
 
     private sealed record HistoryEntry(DateTimeOffset OccurredAt, decimal Amount, string Kind, string Description);
 
@@ -156,10 +164,17 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
     private async Task LoadAsync()
     {
         ActiveCompany = (await active.GetAsync())!;
-        Items = await db.Accounts.AsNoTracking().Include(x => x.FinancialInstitution)
+        AllItems = await db.Accounts.AsNoTracking().Include(x => x.FinancialInstitution)
             .Where(x => x.IsActive && x.CompanyId == active.RequiredId).OrderBy(x => x.FinancialInstitution!.Name).ThenBy(x => x.Currency).ToListAsync();
-        foreach (var item in Items) Balances[item.Id] = await BalanceCalculator.GetAsync(db, item.Id);
-        ConversionBanks = Items.Where(x=>x.FinancialInstitution?.Kind==InstitutionKind.Bank&&x.FinancialInstitutionId.HasValue).GroupBy(x=>x.FinancialInstitutionId).Where(g=>g.Select(x=>x.Currency).Distinct().Count()>1).Select(g=>g.First().FinancialInstitution!).OrderBy(x=>x.Name).ToList();
+        FilterCurrencies = AllItems.Select(x => x.Currency).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
+        var search = Search?.Trim();
+        Currency = Currency?.Trim().ToUpperInvariant();
+        Items = AllItems.Where(x =>
+                (string.IsNullOrWhiteSpace(search) || (x.FinancialInstitution?.Name ?? x.Name).Contains(search, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(Currency) || x.Currency.Equals(Currency, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        foreach (var item in AllItems) Balances[item.Id] = await BalanceCalculator.GetAsync(db, item.Id);
+        ConversionBanks = AllItems.Where(x=>x.FinancialInstitution?.Kind==InstitutionKind.Bank&&x.FinancialInstitutionId.HasValue).GroupBy(x=>x.FinancialInstitutionId).Where(g=>g.Select(x=>x.Currency).Distinct().Count()>1).Select(g=>g.First().FinancialInstitution!).OrderBy(x=>x.Name).ToList();
         Institutions = await db.FinancialInstitutions.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name)
             .Select(x => new SelectListItem(x.Name + " · " + KindLabel(x.Kind), x.Id.ToString())).ToListAsync();
         Currencies = await db.Currencies.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Code)
