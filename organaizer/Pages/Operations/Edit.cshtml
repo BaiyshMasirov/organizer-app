@@ -30,22 +30,22 @@
 
   <div class="row g-4">
     <div class="col-lg-6"><section class="operation-panel send"><h3><span class="direction">↑</span> Отдаём</h3><div class="row g-3">
-      <div class="col-md-7"><label class="form-label">Сумма</label><input asp-for="Input.SellAmount" class="form-control"/></div>
+      <div class="col-md-7"><label class="form-label">Сумма</label><input asp-for="Input.SellAmount" type="number" step="any" inputmode="decimal" class="form-control"/></div>
       <div class="col-md-5"><label class="form-label">Валюта</label><select asp-for="Input.SellCurrency" asp-items="Model.Currencies" class="form-select"></select></div>
       <div class="col-12"><label class="form-label">Откуда отправляем</label><select asp-for="Input.SourceAccount" asp-items="Model.Institutions" class="form-select"><option value="">Не выбран</option></select></div>
     </div></section></div>
     <div class="col-lg-6"><section class="operation-panel receive"><h3><span class="direction">↓</span> Получаем</h3><div class="row g-3">
-      <div class="col-md-7"><label class="form-label">Сумма</label><input asp-for="Input.BuyAmount" class="form-control"/></div>
+      <div class="col-md-7"><label class="form-label">Сумма</label><input asp-for="Input.BuyAmount" type="number" step="any" inputmode="decimal" class="form-control"/></div>
       <div class="col-md-5"><label class="form-label">Валюта</label><select asp-for="Input.BuyCurrency" asp-items="Model.Currencies" class="form-select"></select></div>
       <div class="col-12"><label class="form-label">Куда получаем</label><select asp-for="Input.DestinationAccount" asp-items="Model.Institutions" class="form-select"><option value="">Не выбран</option></select></div>
     </div></section></div>
   </div>
 
   <section class="operation-summary mt-4"><h3>Итог операции</h3><div class="row g-3">
-    <div class="col-md-6 col-xl-3"><label class="form-label">Комиссия</label><input asp-for="Input.FeeAmount" class="form-control"/></div>
+    <div class="col-md-6 col-xl-3"><label class="form-label">Комиссия</label><input asp-for="Input.FeeAmount" type="number" step="any" inputmode="decimal" class="form-control"/></div>
     <div class="col-md-6 col-xl-3"><label class="form-label">Валюта комиссии</label><select asp-for="Input.FeeCurrency" asp-items="Model.Currencies" class="form-select"></select></div>
-    <div class="col-md-6 col-xl-3"><label class="form-label">Курс комиссии к USD</label><input asp-for="Input.ExchangeRate" type="text" inputmode="decimal" class="form-control"/><div id="rate-hint" class="form-hint"></div></div>
-    <div class="col-md-6 col-xl-3"><label class="form-label">Прибыль USD</label><input asp-for="Input.BaseCurrencyProfit" class="form-control"/><div id="profit-hint" class="form-hint"></div><span asp-validation-for="Input.BaseCurrencyProfit" class="text-danger"></span></div>
+    <div class="col-md-6 col-xl-3"><label class="form-label">Курс комиссии к USD</label><input asp-for="Input.ExchangeRate" type="number" step="any" inputmode="decimal" class="form-control"/><div id="rate-hint" class="form-hint"></div></div>
+    <div class="col-md-6 col-xl-3"><label class="form-label">Прибыль USD</label><input asp-for="Input.BaseCurrencyProfit" type="number" step="any" inputmode="decimal" class="form-control"/><div id="profit-hint" class="form-hint"></div><span asp-validation-for="Input.BaseCurrencyProfit" class="text-danger"></span></div>
     <div class="col-12"><label class="form-label">Комментарий</label><textarea asp-for="Input.Note" class="form-control" rows="2"></textarea></div>
   </div></section>
   <div class="mt-4"><button class="btn btn-primary">Сохранить изменения</button></div>
