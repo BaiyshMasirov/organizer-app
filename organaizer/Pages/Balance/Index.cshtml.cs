@@ -16,7 +16,7 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
     public List<SelectListItem> Institutions { get; private set; } = [];
     public List<SelectListItem> Currencies { get; private set; } = [];
     public Dictionary<Guid, decimal> Balances { get; private set; } = [];
-    public List<FinancialInstitution> ConversionBanks { get; private set; } = [];
+    public List<ConversionBankOption> ConversionBanks { get; private set; } = [];
     public Domain.Company ActiveCompany { get; private set; } = null!;
 
     [BindProperty]
@@ -39,6 +39,8 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
         [Range(typeof(decimal), "-999999999999999", "999999999999999", ErrorMessage = "Укажите корректную сумму")]
         public decimal Amount { get; set; }
     }
+
+    public sealed record ConversionBankOption(string Key, string Name);
 
     public async Task OnGetAsync() => await LoadAsync();
 
@@ -90,11 +92,15 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
         TempData["Success"] = "Перевод выполнен"; return RedirectToPage();
     }
 
-    public async Task<IActionResult> OnPostConvertAsync(Guid financialInstitutionId, Guid fromAccountId, Guid toAccountId, decimal fromAmount, decimal toAmount, string? note)
+    public async Task<IActionResult> OnPostConvertAsync(string bankKey, Guid fromAccountId, Guid toAccountId, decimal fromAmount, decimal toAmount, string? note)
     {
-        var accounts = await db.Accounts.Where(x => x.CompanyId == active.RequiredId && (x.Id == fromAccountId || x.Id == toAccountId)).ToListAsync();
+        var accounts = await db.Accounts.Include(x => x.FinancialInstitution)
+            .Where(x => x.CompanyId == active.RequiredId && (x.Id == fromAccountId || x.Id == toAccountId)).ToListAsync();
         var from = accounts.SingleOrDefault(x => x.Id == fromAccountId); var to = accounts.SingleOrDefault(x => x.Id == toAccountId);
-        if (from is null || to is null || from.Id == to.Id || from.FinancialInstitutionId != financialInstitutionId || to.FinancialInstitutionId != financialInstitutionId || from.Currency == to.Currency || fromAmount <= 0 || toAmount <= 0)
+        if (from is null || to is null || from.Id == to.Id || string.IsNullOrWhiteSpace(bankKey) ||
+            !ConversionBankKey(from).Equals(bankKey, StringComparison.OrdinalIgnoreCase) ||
+            !ConversionBankKey(to).Equals(bankKey, StringComparison.OrdinalIgnoreCase) ||
+            from.Currency == to.Currency || fromAmount <= 0 || toAmount <= 0)
             return BalanceError("Для конвертации выберите две разные валюты в одном банке.");
         var available = await BalanceCalculator.GetAsync(db, from.Id);
         if (available < fromAmount) return Insufficient(from.Name, available, fromAmount, from.Currency);
@@ -128,7 +134,13 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
                 (string.IsNullOrWhiteSpace(Currency) || x.Currency.Equals(Currency, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         foreach (var item in AllItems) Balances[item.Id] = await BalanceCalculator.GetAsync(db, item.Id);
-        ConversionBanks = AllItems.Where(x=>x.FinancialInstitution?.Kind==InstitutionKind.Bank&&x.FinancialInstitutionId.HasValue).GroupBy(x=>x.FinancialInstitutionId).Where(g=>g.Select(x=>x.Currency).Distinct().Count()>1).Select(g=>g.First().FinancialInstitution!).OrderBy(x=>x.Name).ToList();
+        ConversionBanks = AllItems
+            .Where(x => x.FinancialInstitution?.Kind == InstitutionKind.Bank)
+            .GroupBy(ConversionBankKey, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Select(x => x.Currency).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+            .Select(g => new ConversionBankOption(g.Key, g.Key))
+            .OrderBy(x => x.Name)
+            .ToList();
         Institutions = await db.FinancialInstitutions.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name)
             .Select(x => new SelectListItem(x.Name + " · " + KindLabel(x.Kind), x.Id.ToString())).ToListAsync();
         Currencies = await db.Currencies.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Code)
@@ -140,6 +152,19 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
         InstitutionKind.Bank => "Банк", InstitutionKind.Exchange => "Биржа", InstitutionKind.Wallet => "Кошелек",
         InstitutionKind.PaymentSystem => "Платежная система", _ => "Другое"
     };
+
+    public static string ConversionBankKey(MoneyAccount account)
+    {
+        var name = (account.FinancialInstitution?.Name ?? account.Name).Trim();
+        var currency = account.Currency.Trim().ToUpperInvariant();
+        var suffixes = new[] { $" {currency} Card", $" {currency}" };
+        foreach (var suffix in suffixes)
+        {
+            if (name.Length > suffix.Length && name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                return name[..^suffix.Length].TrimEnd();
+        }
+        return name;
+    }
 
     private static AccountKind ToAccountKind(InstitutionKind kind) => kind switch
     {
