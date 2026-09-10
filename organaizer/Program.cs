@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
+using OfficeOpenXml;
 using organaizer.Application;
 using organaizer.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+ExcelPackage.License.SetNonCommercialOrganization("Finance Flow");
 
 // Add services to the container.
 builder.Services.AddRazorPages();
