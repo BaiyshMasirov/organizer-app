@@ -54,6 +54,7 @@ using (var scope = app.Services.CreateScope())
     var db=scope.ServiceProvider.GetRequiredService<FinanceDbContext>();
     await SeedData.InitializeAsync(db, scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>(), scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>());
     await HistoricalDataImporter.ImportAsync(db,builder.Configuration["HistoricalImportPath"]);
+    await AccountDirectoryNormalizer.NormalizeAsync(db);
 }
 
 // Configure the HTTP request pipeline.
