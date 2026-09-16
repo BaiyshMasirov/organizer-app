@@ -221,7 +221,8 @@ public static class OperationTypes
         ["BUY_USDT_RUB"]="Покупка USDT/RUB", ["SELL_USDT_RUB"]="Продажа USDT/RUB",
         ["BUY_USD_RUB"]="Покупка USD/RUB", ["SELL_USD_RUB"]="Продажа USD/RUB",
         ["CREDIT_USDT"]="Кредит USDT/USDT", ["LIQUIDITY_USDT"]="Ликвидность USDT/USDT",
-        ["SELL_USD_AED"]="Конвертация (продажа) USD/AED", ["BUY_USD_AED"]="Конвертация (покупка) USD/AED"
+        ["SELL_USD_AED"]="Конвертация (продажа) USD/AED", ["BUY_USD_AED"]="Конвертация (покупка) USD/AED",
+        ["OTHER_INCOME_COMMISSION"]="Прочий приход (Комиссия)"
     };
     public static (string Sell, string Buy) Pair(string code) => code switch
     {
@@ -230,8 +231,10 @@ public static class OperationTypes
         "BUY_USDT_RUB" => ("RUB","USDT"), "SELL_USDT_RUB" => ("USDT","RUB"),
         "BUY_USD_RUB" => ("RUB","USD"), "SELL_USD_RUB" => ("USD","RUB"),
         "SELL_USD_AED" => ("USD","AED"), "BUY_USD_AED" => ("AED","USD"),
+        "OTHER_INCOME_COMMISSION" => ("USD","USD"),
         _ => ("USDT","USDT")
     };
+    public static bool IsOneSidedIncome(string code) => code == "OTHER_INCOME_COMMISSION";
     public static string PairLabel(string code){var p=Pair(code);return $"{p.Sell}/{p.Buy}";}
 }
 

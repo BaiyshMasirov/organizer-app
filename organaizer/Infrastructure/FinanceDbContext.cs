@@ -40,7 +40,8 @@ public sealed class FinanceDbContext(DbContextOptions<FinanceDbContext> options,
         b.Entity<TradeOperation>().HasQueryFilter(x => ActiveCompanyId == null || x.CompanyId == ActiveCompanyId);
         b.Entity<Expense>().HasQueryFilter(x => ActiveCompanyId == null || x.CompanyId == ActiveCompanyId);
         b.Entity<AccountMovement>().HasQueryFilter(x => ActiveCompanyId == null || x.CompanyId == ActiveCompanyId);
-        b.Entity<MoneyAccount>().HasIndex(x => new { x.CompanyId, x.FinancialInstitutionId, x.Currency }).IsUnique();
+        b.Entity<MoneyAccount>().HasIndex(x => new { x.CompanyId, x.FinancialInstitutionId, x.Currency });
+        b.Entity<MoneyAccount>().HasIndex(x => new { x.CompanyId, x.Name, x.Currency });
         b.Entity<AccountMovement>().HasIndex(x => new { x.AccountId, x.OccurredAt });
         b.Entity<AccountMovement>().HasIndex(x => x.GroupId);
         b.Entity<Settlement>().HasIndex(x => new { x.AccountId, x.OccurredAt });

@@ -33,6 +33,9 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
         [Required(ErrorMessage = "Выберите кошелек или банк")]
         public Guid? FinancialInstitutionId { get; set; }
 
+        [Required(ErrorMessage = "Укажите название счёта"), StringLength(160)]
+        public string AccountName { get; set; } = "";
+
         [Required(ErrorMessage = "Выберите валюту"), StringLength(5)]
         public string Currency { get; set; } = "USDT";
 
@@ -54,15 +57,16 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
         Input.Currency = Input.Currency.Trim().ToUpperInvariant();
         if (!await db.Currencies.AnyAsync(x => x.Code == Input.Currency && x.IsActive))
             ModelState.AddModelError("Input.Currency", "Выберите активную валюту");
-        if (institution is not null && await db.Accounts.AnyAsync(x => x.FinancialInstitutionId == institution.Id && x.Currency == Input.Currency))
-            ModelState.AddModelError(string.Empty, "Для этого источника и валюты баланс уже создан. Измените существующую запись.");
+        Input.AccountName = Input.AccountName.Trim();
+        if (await db.Accounts.AnyAsync(x => x.CompanyId == active.RequiredId && x.Name.ToLower() == Input.AccountName.ToLower() && x.Currency == Input.Currency))
+            ModelState.AddModelError("Input.AccountName", "Счёт с таким названием и валютой уже существует.");
         if (!ModelState.IsValid) { await LoadAsync(); return Page(); }
 
         var companyId = active.RequiredId;
         db.Accounts.Add(new MoneyAccount
         {
             Id = Guid.NewGuid(), CompanyId = companyId, FinancialInstitutionId = institution!.Id,
-            Name = institution.Name, Kind = ToAccountKind(institution.Kind), Currency = Input.Currency,
+            Name = Input.AccountName, Kind = ToAccountKind(institution.Kind), Currency = Input.Currency,
             OpeningBalance = Input.Amount
         });
         await db.SaveChangesAsync();
@@ -125,12 +129,12 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
     {
         ActiveCompany = (await active.GetAsync())!;
         AllItems = await db.Accounts.AsNoTracking().Include(x => x.FinancialInstitution)
-            .Where(x => x.IsActive && x.CompanyId == active.RequiredId).OrderBy(x => x.FinancialInstitution!.Name).ThenBy(x => x.Currency).ToListAsync();
+            .Where(x => x.IsActive && x.CompanyId == active.RequiredId).OrderBy(x => x.FinancialInstitution!.Name).ThenBy(x => x.Name).ThenBy(x => x.Currency).ToListAsync();
         FilterCurrencies = AllItems.Select(x => x.Currency).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
         var search = Search?.Trim();
         Currency = Currency?.Trim().ToUpperInvariant();
         Items = AllItems.Where(x =>
-                (string.IsNullOrWhiteSpace(search) || (x.FinancialInstitution?.Name ?? x.Name).Contains(search, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(search) || (x.FinancialInstitution?.Name ?? "").Contains(search, StringComparison.OrdinalIgnoreCase) || x.Name.Contains(search, StringComparison.OrdinalIgnoreCase)) &&
                 (string.IsNullOrWhiteSpace(Currency) || x.Currency.Equals(Currency, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         foreach (var item in AllItems) Balances[item.Id] = await BalanceCalculator.GetAsync(db, item.Id);

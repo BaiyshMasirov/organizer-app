@@ -36,6 +36,7 @@ public static class SeedData
         if (!await users.IsInRoleAsync(superAdmin, superAdminRole))
             await EnsureSucceeded(users.AddToRoleAsync(superAdmin, superAdminRole));
         await EnsureNbkrBaselineAsync(db);
+        await EnsureAaUsdtRateAsync(db);
         if (!await db.Companies.AnyAsync())
         {
             var broker = new Company { Id=Guid.NewGuid(), Name="Кыргызстан — Криптообменник", Kind=CompanyKind.Broker };
@@ -64,6 +65,29 @@ public static class SeedData
         await AddClients(db, brokerCompany.Id, SeedCatalog.BrokerClients);
         await AddClients(db, liquidityCompany.Id, SeedCatalog.LiquidityClients);
         await db.SaveChangesAsync();
+    }
+
+    private static async Task EnsureAaUsdtRateAsync(FinanceDbContext db)
+    {
+        var rate = await db.ExchangeRates.SingleOrDefaultAsync(x => x.ImportKey == AaExchangeRateService.UsdtImportKey);
+        if (rate is null)
+        {
+            db.ExchangeRates.Add(new ExchangeRate
+            {
+                Id = Guid.NewGuid(), Currency = "USDT",
+                EffectiveAt = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero),
+                SourceOrder = 1_900_000, RateToUsd = 1m / AaExchangeRateService.UsdToUsdt,
+                Note = "Постоянный курс A&A: 1 USD = 1,003 USDT",
+                ImportKey = AaExchangeRateService.UsdtImportKey
+            });
+            await db.SaveChangesAsync();
+        }
+        else if (rate.RateToUsd != 1m / AaExchangeRateService.UsdToUsdt)
+        {
+            rate.RateToUsd = 1m / AaExchangeRateService.UsdToUsdt;
+            rate.Note = "Постоянный курс A&A: 1 USD = 1,003 USDT";
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task EnsureNbkrBaselineAsync(FinanceDbContext db)

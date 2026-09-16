@@ -90,7 +90,7 @@ public sealed class IndexModel(FinanceDbContext db, CbrRateService cbr, ActiveCo
     private async Task Load()
     {
         IsLiquidityProvider = await db.Companies.AsNoTracking().AnyAsync(x => x.Id == active.RequiredId && x.Kind == CompanyKind.LiquidityProvider);
-        Currencies = new SelectList(await db.Currencies.AsNoTracking().Where(x => x.IsActive && x.Code != "USDT").OrderBy(x => x.Code).ToListAsync(), "Code", "Code", Input.Currency);
+        Currencies = new SelectList(await db.Currencies.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Code).ToListAsync(), "Code", "Code", Input.Currency);
         var q = db.ExchangeRates.AsNoTracking().AsQueryable();
         if (!string.IsNullOrWhiteSpace(Currency)) q = q.Where(x => x.Currency == Currency);
         if (Year.HasValue) q = q.Where(x => x.EffectiveAt.Year == Year);

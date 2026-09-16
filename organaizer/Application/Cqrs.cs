@@ -27,12 +27,15 @@ public sealed class CreateOperationHandler(FinanceDbContext db) : ICommandHandle
     public async Task<Guid> Handle(CreateOperationCommand c, CancellationToken ct)
     {
         if (!OperationTypes.All.ContainsKey(c.TypeCode)) throw new ArgumentException("Неизвестный тип операции");
-        if (c.SellAmount <= 0 || c.BuyAmount <= 0) throw new ArgumentException("Суммы должны быть больше нуля");
+        var oneSidedIncome = OperationTypes.IsOneSidedIncome(c.TypeCode);
+        if ((!oneSidedIncome && (c.SellAmount <= 0 || c.BuyAmount <= 0)) ||
+            (oneSidedIncome && (c.SellAmount != 0 || c.BuyAmount <= 0)))
+            throw new ArgumentException(oneSidedIncome ? "Для прочего прихода заполните только сумму получения" : "Суммы должны быть больше нуля");
         var pair = OperationTypes.Pair(c.TypeCode);
         var op = new TradeOperation { Id=Guid.NewGuid(), CompanyId=c.CompanyId, CounterpartyId=c.CounterpartyId,
             TypeCode=c.TypeCode, OccurredAt=c.OccurredAt.ToUniversalTime(), DueAt=c.DueAt?.ToUniversalTime(),
-            SellCurrency=pair.Sell, SellAmount=c.SellAmount,
-            BuyCurrency=pair.Buy, BuyAmount=c.BuyAmount, FeeAmount=c.FeeAmount,
+            SellCurrency=oneSidedIncome ? c.BuyCurrency.ToUpperInvariant() : pair.Sell, SellAmount=c.SellAmount,
+            BuyCurrency=oneSidedIncome ? c.BuyCurrency.ToUpperInvariant() : pair.Buy, BuyAmount=c.BuyAmount, FeeAmount=c.FeeAmount,
             FeeCurrency=c.FeeCurrency.ToUpperInvariant(), BaseCurrencyProfit=c.BaseCurrencyProfit,
             ExchangeRate=c.ExchangeRate, SourceAccount=c.SourceAccount, DestinationAccount=c.DestinationAccount, Note=c.Note };
         db.Operations.Add(op);
@@ -51,7 +54,10 @@ public sealed class UpdateOperationHandler(FinanceDbContext db) : ICommandHandle
     public async Task<bool> Handle(UpdateOperationCommand c, CancellationToken ct)
     {
         if (!OperationTypes.All.ContainsKey(c.TypeCode)) throw new ArgumentException("Неизвестный тип операции");
-        if (c.SellAmount <= 0 || c.BuyAmount <= 0) throw new ArgumentException("Суммы должны быть больше нуля");
+        var oneSidedIncome = OperationTypes.IsOneSidedIncome(c.TypeCode);
+        if ((!oneSidedIncome && (c.SellAmount <= 0 || c.BuyAmount <= 0)) ||
+            (oneSidedIncome && (c.SellAmount != 0 || c.BuyAmount <= 0)))
+            throw new ArgumentException(oneSidedIncome ? "Для прочего прихода заполните только сумму получения" : "Суммы должны быть больше нуля");
         var op = await db.Operations.SingleAsync(x => x.Id == c.Id, ct);
         var settlements = await db.Settlements.Where(x => x.OperationId == c.Id).ToListAsync(ct);
         op.CompanyId=c.CompanyId; op.CounterpartyId=c.CounterpartyId; op.TypeCode=c.TypeCode;
@@ -77,6 +83,11 @@ public sealed class UpdateOperationHandler(FinanceDbContext db) : ICommandHandle
             if (direction.Count > 1) return;
 
             var settlement = direction.SingleOrDefault();
+            if (amount == 0)
+            {
+                if (settlement is not null) db.Settlements.Remove(settlement);
+                return;
+            }
             Guid? accountId = settlement?.AccountId;
             if (!string.IsNullOrWhiteSpace(accountName))
             {
