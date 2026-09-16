@@ -37,7 +37,7 @@ public static class AccountDirectoryNormalizer
             var companyId = await db.Companies.Where(x => x.Kind == CompanyKind.LiquidityProvider).Select(x => x.Id).SingleAsync();
             if (!accounts.Any(x => x.CompanyId == companyId && x.Currency == "USD" && x.Name == "BAKAI USD Трейдинг"))
             {
-                var canonical = await EnsureInstitutionAsync("BAKAI", InstitutionKind.Bank);
+                var canonical = EnsureInstitution("BAKAI", InstitutionKind.Bank);
                 var account = new MoneyAccount
                 {
                     Id=Guid.NewGuid(), CompanyId=companyId, FinancialInstitutionId=canonical.Id,
@@ -51,14 +51,14 @@ public static class AccountDirectoryNormalizer
         foreach (var (aliasName, canonicalName) in Aliases)
         {
             if (!byName.TryGetValue(aliasName, out var alias)) continue;
-            var canonical = await EnsureInstitutionAsync(canonicalName, alias.Kind);
+            var canonical = EnsureInstitution(canonicalName, alias.Kind);
             foreach (var account in accounts.Where(x => x.FinancialInstitutionId == alias.Id))
                 account.FinancialInstitutionId = canonical.Id;
             if (alias.Id != canonical.Id) alias.IsActive = false;
         }
         await db.SaveChangesAsync();
 
-        async Task<FinancialInstitution> EnsureInstitutionAsync(string name, InstitutionKind kind)
+        FinancialInstitution EnsureInstitution(string name, InstitutionKind kind)
         {
             if (byName.TryGetValue(name, out var existing))
             {
