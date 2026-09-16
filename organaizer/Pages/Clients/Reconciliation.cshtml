@@ -3,6 +3,7 @@
 @{ViewData["Title"]="Акт сверки";}
 <div class="d-flex justify-content-between align-items-center mb-4"><div><h1 class="mb-1">Акт сверки</h1><div class="text-secondary">@Model.Company.Name · @Model.Client.Name</div></div><a asp-page="Index" class="btn btn-light">Назад</a></div>
 <form method="get" asp-page-handler="Export" class="card card-body">
+  <input type="hidden" name="handler" value="Export"/>
   <input type="hidden" asp-for="Id"/>
   <div class="row g-3 align-items-end">
     <div class="col-md-3"><label class="form-label">Период с</label><input asp-for="From" type="date" class="form-control" required/></div>
