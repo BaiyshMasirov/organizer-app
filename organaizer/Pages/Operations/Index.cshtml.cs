@@ -53,7 +53,7 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
 
         using var package = new ExcelPackage();
         var sheet = package.Workbook.Worksheets.Add("Операции");
-        var headers = new[] { "Дата", "Тип / клиент", "Отдаем", "Получаем", "Прибыль" };
+        var headers = new[] { "Дата", "Тип / клиент", "Отдаем", "Откуда отправляем", "Получаем", "Куда получаем", "Прибыль" };
         for (var column = 1; column <= headers.Length; column++) sheet.Cells[1, column].Value = headers[column - 1];
 
         for (var index = 0; index < items.Count; index++)
@@ -65,8 +65,10 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
             sheet.Cells[row, 2].Value = $"{OperationTypes.All.GetValueOrDefault(operation.TypeCode, operation.TypeCode)}\n{operation.Counterparty?.Name ?? "Без клиента"}";
             sheet.Cells[row, 2].Style.WrapText = true;
             SetMoneyCell(sheet.Cells[row, 3], operation.SellAmount, operation.SellCurrency);
-            SetMoneyCell(sheet.Cells[row, 4], operation.BuyAmount, operation.BuyCurrency);
-            SetMoneyCell(sheet.Cells[row, 5], operation.BaseCurrencyProfit, "USD");
+            sheet.Cells[row, 4].Value = operation.SourceAccount ?? "—";
+            SetMoneyCell(sheet.Cells[row, 5], operation.BuyAmount, operation.BuyCurrency);
+            sheet.Cells[row, 6].Value = operation.DestinationAccount ?? "—";
+            SetMoneyCell(sheet.Cells[row, 7], operation.BaseCurrencyProfit, "USD");
         }
 
         using (var header = sheet.Cells[1, 1, 1, headers.Length])
@@ -83,9 +85,11 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
         sheet.Column(1).Width = 14;
         sheet.Column(2).Width = 42;
         sheet.Column(3).Width = 22;
-        sheet.Column(4).Width = 22;
-        sheet.Column(5).Width = 20;
-        sheet.Cells[2, 3, Math.Max(items.Count + 1, 2), 5].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
+        sheet.Column(4).Width = 24;
+        sheet.Column(5).Width = 22;
+        sheet.Column(6).Width = 24;
+        sheet.Column(7).Width = 20;
+        sheet.Cells[2, 3, Math.Max(items.Count + 1, 2), 7].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
         sheet.Cells[1, 1, Math.Max(items.Count + 1, 1), headers.Length].Style.VerticalAlignment = ExcelVerticalAlignment.Center;
 
         var fileName = $"operations_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";

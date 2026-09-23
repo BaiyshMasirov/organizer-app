@@ -2,14 +2,29 @@
 @model organaizer.Pages.Clients.ReconciliationModel
 @{ViewData["Title"]="Акт сверки";}
 <div class="d-flex justify-content-between align-items-center mb-4"><div><h1 class="mb-1">Акт сверки</h1><div class="text-secondary">@Model.Company.Name · @Model.Client.Name</div></div><a asp-page="Index" class="btn btn-light">Назад</a></div>
-<form method="get" asp-page-handler="Export" class="card card-body">
-  <input type="hidden" name="handler" value="Export"/>
+@if(ViewData.ModelState.ErrorCount>0){<div asp-validation-summary="All" class="alert alert-danger"></div>}
+<form method="get" class="card card-body mb-4">
   <input type="hidden" asp-for="Id"/>
   <div class="row g-3 align-items-end">
     <div class="col-md-3"><label class="form-label">Период с</label><input asp-for="From" type="date" class="form-control" required/></div>
     <div class="col-md-3"><label class="form-label">по</label><input asp-for="To" type="date" class="form-control" required/></div>
     <div class="col-md-3"><label class="form-label">Валюта сверки</label><select asp-for="Currency" asp-items="Model.Currencies" class="form-select"></select></div>
-    <div class="col-md-3"><button class="btn btn-success w-100">↓ Сформировать Excel</button></div>
+    <div class="col-md-3"><button class="btn btn-primary w-100">Показать движения</button></div>
   </div>
-  <div class="form-hint mt-3">В акт попадут начальное сальдо, операции за период, обороты, конечное сальдо и итоговая задолженность. Для каждой валюты формируется отдельный акт.</div>
 </form>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="metric"><span>Начальное сальдо</span><strong class="@(Model.OpeningBalance<0?"text-danger":"")">@Model.OpeningBalance.ToString("N2") @Model.Currency</strong></div></div>
+  <div class="col-md-3"><div class="metric"><span>Получено за период</span><strong class="text-success">@Model.Lines.Sum(x=>x.Debit).ToString("N2") @Model.Currency</strong></div></div>
+  <div class="col-md-3"><div class="metric"><span>Отдано за период</span><strong class="text-danger">@Model.Lines.Sum(x=>x.Credit).ToString("N2") @Model.Currency</strong></div></div>
+  <div class="col-md-3"><div class="metric accent"><span>Конечное сальдо / эквивалент</span><strong class="@(Model.ClosingBalance<0?"text-danger":"text-success")">@Model.ClosingBalance.ToString("N2") @Model.Currency</strong><div class="text-secondary mt-1">@Model.ClosingUsd.ToString("N2") USD</div></div></div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><div><div class="card-title">Предварительный просмотр</div><div class="text-secondary small">Каждая строка показывает обе связанные стороны одной операции.</div></div><a asp-page-handler="Export" asp-route-id="@Model.Id" asp-route-from="@Model.From.ToString("yyyy-MM-dd")" asp-route-to="@Model.To.ToString("yyyy-MM-dd")" asp-route-currency="@Model.Currency" class="btn btn-success ms-auto">↓ Сформировать Excel</a></div>
+  <div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>Дата</th><th>Операция и связанная сторона</th><th class="text-end">Получено</th><th class="text-end">Отдано</th><th class="text-end">Эквивалент USD</th><th></th></tr></thead><tbody>
+  @foreach(var line in Model.Lines){<tr><td class="text-nowrap">@line.Date.ToString("dd.MM.yyyy")</td><td>@line.Description</td><td class="text-end text-success">@(line.Debit==0?"—":$"{line.Debit:N2} {Model.Currency}")</td><td class="text-end text-danger">@(line.Credit==0?"—":$"{line.Credit:N2} {Model.Currency}")</td><td class="text-end fw-bold @(line.UsdEquivalent<0?"text-danger":"text-success")">@(line.UsdEquivalent>0?"+":"")@line.UsdEquivalent.ToString("N2") USD</td><td class="text-end"><a asp-page="/Operations/Details" asp-route-id="@line.OperationId" class="btn btn-sm btn-ghost-secondary">Открыть</a></td></tr>}
+  @if(Model.Lines.Count==0){<tr><td colspan="6" class="empty-state">У этого контрагента нет движений в выбранной валюте за период</td></tr>}
+  </tbody></table></div>
+</div>
+<div class="alert alert-info">Положительное сальдо означает задолженность контрагента перед компанией, отрицательное — задолженность компании перед контрагентом. Эквивалент USD берётся из второй стороны той же сделки, если это USD/USDT; иначе используется курс на дату операции.</div>
