@@ -2,6 +2,12 @@ using Microsoft.AspNetCore.Mvc;using Microsoft.AspNetCore.Mvc.Rendering;using Mi
 namespace organaizer.Pages.Expenses;
 public sealed class EditModel(FinanceDbContext db, ActiveCompany activeCompany):PageModel
 {
+ public async Task<IActionResult> OnGetConvertAsync(decimal amount, string currency, DateTime date)
+ {
+     if(!ModelState.IsValid || amount <= 0 || amount > 9999999999999999m || string.IsNullOrWhiteSpace(currency) || currency.Length > 5 || date == default || date.Date == DateTime.MaxValue.Date) return BadRequest();
+     var converted = await ExpenseValuation.CalculateAsync(db, activeCompany.RequiredId, amount, currency, date);
+     return new JsonResult(new { amountUsd = converted });
+ }
  [BindProperty]public ExpenseForm Input{get;set;}=new();public SelectList Companies{get;private set;}=null!;public SelectList Accounts{get;private set;}=null!;public SelectList Currencies{get;private set;}=null!;
  public async Task<IActionResult>OnGetAsync(Guid id){var x=await db.Expenses.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==id);if(x is null)return NotFound();Input=new(){Id=x.Id,CompanyId=x.CompanyId,AccountId=x.AccountId,OccurredAt=x.OccurredAt.DateTime,Category=x.Category,Amount=x.Amount,Currency=x.Currency,Note=x.Note};await Load();return Page();}
  public async Task<IActionResult>OnPostAsync(){var x=await db.Expenses.SingleOrDefaultAsync(x=>x.Id==Input.Id);if(x is null)return NotFound();var account=await db.Accounts.AsNoTracking().SingleOrDefaultAsync(a=>a.Id==Input.AccountId);if(account is null||account.CompanyId!=Input.CompanyId)ModelState.AddModelError("Input.AccountId","Счет не принадлежит выбранной компании");if(activeCompany.Id is { } activeId && Input.CompanyId != activeId)ModelState.AddModelError("Input.CompanyId","Выберите текущую компанию");

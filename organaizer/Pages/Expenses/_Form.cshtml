@@ -1,2 +1,35 @@
 @model organaizer.Pages.Expenses.ExpenseForm
-<form method="post" class="card card-body"><div asp-validation-summary="All" class="text-danger"></div><input type="hidden" name="Input.Id" value="@Model.Id"/><div class="row g-3"><div class="col-md-6"><label class="form-label">Компания</label><select name="Input.CompanyId" asp-items="ViewBag.Companies" class="form-select"></select></div><div class="col-md-6"><label class="form-label">Счет / банк</label><select name="Input.AccountId" asp-items="ViewBag.Accounts" class="form-select"></select></div><div class="col-md-3"><label class="form-label">Дата</label><input name="Input.OccurredAt" value="@Model.OccurredAt.ToString("yyyy-MM-dd")" type="date" class="form-control"/></div><div class="col-md-5"><label class="form-label">Категория</label><input name="Input.Category" value="@Model.Category" class="form-control"/></div><div class="col-md-2"><label class="form-label">Сумма</label><input name="Input.Amount" value="@Model.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture)" type="number" step="any" inputmode="decimal" class="form-control"/></div><div class="col-md-2"><label class="form-label">Валюта</label><select name="Input.Currency" asp-items="ViewBag.Currencies" class="form-select"></select></div><div class="col-12"><label class="form-label">Комментарий</label><textarea name="Input.Note" class="form-control">@Model.Note</textarea></div><div class="col-12"><button class="btn btn-primary">Сохранить</button> <a asp-page="Index" class="btn btn-light">Отмена</a></div></div></form>
+<form method="post" class="card card-body"><div asp-validation-summary="All" class="text-danger"></div><input type="hidden" name="Input.Id" value="@Model.Id"/><div class="row g-3"><div class="col-md-6"><label class="form-label">Компания</label><select name="Input.CompanyId" asp-items="ViewBag.Companies" class="form-select"></select></div><div class="col-md-6"><label class="form-label">Счет / банк</label><select name="Input.AccountId" asp-items="ViewBag.Accounts" class="form-select"></select></div><div class="col-md-3"><label class="form-label">Дата</label><input name="Input.OccurredAt" value="@Model.OccurredAt.ToString("yyyy-MM-dd")" type="date" class="form-control"/></div><div class="col-md-5"><label class="form-label">Категория</label><input name="Input.Category" value="@Model.Category" class="form-control"/></div><div class="col-md-2"><label class="form-label">Сумма</label><input name="Input.Amount" value="@Model.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture)" type="number" step="any" inputmode="decimal" class="form-control"/></div><div class="col-md-2"><label class="form-label">Валюта</label><select name="Input.Currency" asp-items="ViewBag.Currencies" class="form-select"></select></div><div class="col-12"><div class="alert alert-info mb-0"><strong>Эквивалент в долларах: <span id="expense-usd" aria-live="polite">—</span></strong><div class="small">Пересчёт по курсу на дату расхода (для Ориент Кэпитал — НБКР). Введите сумму в исходной валюте и выберите счёт в той же валюте. Долларовый эквивалент рассчитывается автоматически при сохранении.</div></div></div><div class="col-12"><label class="form-label">Комментарий</label><textarea name="Input.Note" class="form-control">@Model.Note</textarea></div><div class="col-12"><button class="btn btn-primary">Сохранить</button> <a asp-page="Index" class="btn btn-light">Отмена</a></div></div></form>
+
+<script>
+(() => {
+    const output = document.getElementById('expense-usd');
+    const form = output.closest('form');
+    const amount = form.elements['Input.Amount'];
+    const currency = form.elements['Input.Currency'];
+    const date = form.elements['Input.OccurredAt'];
+    let timer, version = 0;
+    function update() {
+        const current = ++version;
+        clearTimeout(timer);
+        output.textContent = '—';
+        if (!amount.value || Number(amount.value) <= 0 || !date.value || !currency.value) return;
+        output.textContent = 'Расчёт…';
+        timer = setTimeout(async () => {
+            try {
+                const url = new URL(window.location.href);
+                url.search = new URLSearchParams({ handler: 'Convert', amount: amount.value, currency: currency.value, date: date.value });
+                const response = await fetch(url, { headers: { Accept: 'application/json' } });
+                if (!response.ok) throw new Error('Conversion failed');
+                const data = await response.json();
+                if (current !== version) return;
+                output.textContent = data.amountUsd == null ? 'Курс на выбранную дату не найден' : new Intl.NumberFormat('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}).format(data.amountUsd) + ' USD';
+            } catch {
+                if (current === version) output.textContent = 'Не удалось загрузить курс. Повторите ввод.';
+            }
+        }, 250);
+    }
+    [amount, currency, date].forEach(field => field.addEventListener('input', update));
+    update();
+})();
+</script>

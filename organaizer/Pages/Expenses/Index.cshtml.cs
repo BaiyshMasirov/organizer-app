@@ -7,6 +7,7 @@ namespace organaizer.Pages.Expenses;
 
 public sealed class IndexModel(FinanceDbContext db):PageModel
 {
+    public Dictionary<Guid,decimal?> UsdAmounts { get; } = [];
     public List<Expense> Items{get;private set;}=[];
     public Dictionary<Guid,string> Companies{get;private set;}=[];
     public Dictionary<Guid,string> Accounts{get;private set;}=[];
@@ -22,5 +23,7 @@ public sealed class IndexModel(FinanceDbContext db):PageModel
         if(month is >=1 and <=12)query=query.Where(x=>x.OccurredAt.Month==month.Value);
         if(!string.IsNullOrWhiteSpace(category))query=query.Where(x=>x.Category.ToLower().Contains(category.Trim().ToLower()));
         Items=await query.OrderByDescending(x=>x.OccurredAt).ThenBy(x=>x.Category).ToListAsync();
+        foreach(var item in Items)
+            UsdAmounts[item.Id] = item.BaseCurrencyAmount != 0 ? item.BaseCurrencyAmount : await ExpenseValuation.CalculateAsync(db,item.CompanyId,item.Amount,item.Currency,item.OccurredAt.UtcDateTime);
     }
 }

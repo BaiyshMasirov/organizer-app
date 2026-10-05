@@ -75,6 +75,16 @@ Check(operationsPage.Items.Select(x=>x.Id).SequenceEqual(new[]{older.Id,newer.Id
 await operationsPage.OnGetAsync("RUB",null,null,null,null,null,null);
 Check(operationsPage.TotalCount==3,"Currency search remains available");
 
+var previewPage = new CreateModel(db,active);
+var preview = (JsonResult)await previewPage.OnGetConvertAsync(875m,"KGS",date);
+Check((decimal?)preview.Value!.GetType().GetProperty("amountUsd")!.GetValue(preview.Value)==10m,"Live KGS preview matches saved USD valuation");
+var editPreview = (JsonResult)await new EditModel(db,active).OnGetConvertAsync(12.5m,"USD",date);
+Check((decimal?)editPreview.Value!.GetType().GetProperty("amountUsd")!.GetValue(editPreview.Value)==12.5m,"Edit preview supports USD");
+Check(await previewPage.OnGetConvertAsync(-1,"KGS",date) is BadRequestResult,"Preview rejects invalid amount");
+var expenseList = new organaizer.Pages.Expenses.IndexModel(db);
+await expenseList.OnGetAsync(company.Id,2026,10,null);
+Check(expenseList.UsdAmounts[saved.Id]==10m,"Expense list displays legacy KGS dollar equivalent");
+
 sealed class TestSession : ISession
 {
     readonly Dictionary<string,byte[]> values=new();
