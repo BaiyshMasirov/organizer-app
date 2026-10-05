@@ -132,10 +132,9 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
         var query = db.Operations.AsNoTracking().Include(x => x.Counterparty).Where(x => x.CompanyId == active.RequiredId);
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var term = search.ToLower();
+            var term = search.ToLowerInvariant();
             query = query.Where(x =>
                 (x.Counterparty != null && x.Counterparty.Name.ToLower().Contains(term)) ||
-                (x.Note != null && x.Note.ToLower().Contains(term)) ||
                 x.SellCurrency.ToLower().Contains(term) ||
                 x.BuyCurrency.ToLower().Contains(term));
         }
@@ -162,8 +161,8 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
 
     private static IOrderedQueryable<TradeOperation> ApplySorting(IQueryable<TradeOperation> query, string sort) =>
         sort == DateAscending
-            ? query.OrderBy(x => x.OccurredAt).ThenBy(x => x.Id)
-            : query.OrderByDescending(x => x.OccurredAt).ThenByDescending(x => x.Id);
+            ? query.OrderBy(x => x.OccurredAt).ThenBy(x => x.CreatedAt ?? x.OccurredAt).ThenBy(x => x.Id)
+            : query.OrderByDescending(x => x.OccurredAt).ThenByDescending(x => x.CreatedAt ?? x.OccurredAt).ThenByDescending(x => x.Id);
 
     private static void SetMoneyCell(ExcelRange cell, decimal amount, string currency)
     {

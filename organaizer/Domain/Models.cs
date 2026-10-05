@@ -73,6 +73,7 @@ public sealed class TradeOperation
     public Counterparty? Counterparty { get; set; }
     [MaxLength(40)] public required string TypeCode { get; set; }
     public DateTimeOffset OccurredAt { get; set; }
+    public DateTimeOffset? CreatedAt { get; set; }
     public DateTimeOffset? DueAt { get; set; }
     [MaxLength(5)] public required string SellCurrency { get; set; }
     public decimal SellAmount { get; set; }

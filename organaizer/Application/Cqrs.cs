@@ -33,7 +33,7 @@ public sealed class CreateOperationHandler(FinanceDbContext db) : ICommandHandle
             throw new ArgumentException(oneSidedIncome ? "Для прочего прихода заполните только сумму получения" : "Суммы должны быть больше нуля");
         var pair = OperationTypes.Pair(c.TypeCode);
         var op = new TradeOperation { Id=Guid.NewGuid(), CompanyId=c.CompanyId, CounterpartyId=c.CounterpartyId,
-            TypeCode=c.TypeCode, OccurredAt=c.OccurredAt.ToUniversalTime(), DueAt=c.DueAt?.ToUniversalTime(),
+            TypeCode=c.TypeCode, CreatedAt=DateTimeOffset.UtcNow, OccurredAt=c.OccurredAt.ToUniversalTime(), DueAt=c.DueAt?.ToUniversalTime(),
             SellCurrency=oneSidedIncome ? c.BuyCurrency.ToUpperInvariant() : pair.Sell, SellAmount=c.SellAmount,
             BuyCurrency=oneSidedIncome ? c.BuyCurrency.ToUpperInvariant() : pair.Buy, BuyAmount=c.BuyAmount, FeeAmount=c.FeeAmount,
             FeeCurrency=c.FeeCurrency.ToUpperInvariant(), BaseCurrencyProfit=c.BaseCurrencyProfit,
@@ -194,7 +194,9 @@ public sealed class DashboardHandler(FinanceDbContext db) : IQueryHandler<Dashbo
         var accounts = db.Accounts.AsNoTracking().AsQueryable();
         if (q.CompanyId is { } id) { ops=ops.Where(x=>x.CompanyId==id); expenses=expenses.Where(x=>x.CompanyId==id); accounts=accounts.Where(x=>x.CompanyId==id); }
         var profit = await ops.SumAsync(x => x.BaseCurrencyProfit, ct);
-        var expense = await expenses.SumAsync(x => x.BaseCurrencyAmount, ct);
+        var expense = 0m;
+        foreach (var item in await expenses.ToListAsync(ct))
+            expense += await ExpenseValuation.ResolveAsync(db, item, ct);
         var accountRows = await accounts.Select(a => new { a.Id, a.Name, a.Currency, a.OpeningBalance }).ToListAsync(ct);
         var accountIds = accountRows.Select(x => x.Id).ToList();
         var movements = await db.Settlements.AsNoTracking().Where(x => accountIds.Contains(x.AccountId) && x.Operation!.Status != OperationStatus.Cancelled)
@@ -248,7 +250,11 @@ public sealed class MonthlyReportHandler(FinanceDbContext db) : IQueryHandler<Mo
         // Закрытые импортированные месяцы берем из контрольного итога Excel. Новые ручные
         // операции (ImportKey == null) и месяцы без итогового блока считаем самостоятельно.
         var liveLpRows=lpRows.Where(x=>x.ImportKey==null||!coveredMonths.Contains((x.OccurredAt.Year,x.OccurredAt.Month))).ToList();
-        var expense=expenseRows.Sum(x=>InUsd(x.Amount,x.Currency))+liveLpRows.Sum(x=>InUsd(x.FeeAmount,x.FeeCurrency));
+        var expense=liveLpRows.Sum(x=>InUsd(x.FeeAmount,x.FeeCurrency));
+        foreach (var item in expenseRows)
+            expense += companyKinds.GetValueOrDefault(item.CompanyId) == CompanyKind.Broker
+                ? await ExpenseValuation.ResolveAsync(db, item, ct)
+                : InUsd(item.Amount,item.Currency);
         var liquidityProfit=monthlyResults.Sum(x=>x.EquivalentUsdt)+liveLpRows.Sum(x=>InUsd(x.BuyAmount,x.BuyCurrency)-InUsd(x.SellAmount,x.SellCurrency));
         var brokerProfit=rows.Where(x=>companyKinds.GetValueOrDefault(x.CompanyId)==CompanyKind.Broker).Sum(OperationProfit);
         var profit=(selectedKinds.Contains(CompanyKind.LiquidityProvider)?liquidityProfit:0m)+(selectedKinds.Contains(CompanyKind.Broker)?brokerProfit:0m);
