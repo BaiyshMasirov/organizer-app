@@ -54,7 +54,7 @@ public sealed class CreateModel(Dispatcher dispatcher, FinanceDbContext db, Acti
         Input = new InputModel
         {
             CompanyId=active.RequiredId, CounterpartyId=source.CounterpartyId, TypeCode=source.TypeCode,
-            OccurredAt=source.OccurredAt.Date, DueAt=source.DueAt?.Date, SellCurrency=source.SellCurrency,
+            OccurredAt=DateTime.Today, DueAt=source.DueAt?.Date, SellCurrency=source.SellCurrency,
             SellAmount=source.SellAmount, BuyCurrency=source.BuyCurrency, BuyAmount=source.BuyAmount,
             ExchangeRate=source.ExchangeRate, FeeAmount=source.FeeAmount, FeeCurrency=source.FeeCurrency,
             BaseCurrencyProfit=source.BaseCurrencyProfit, SellAccountId=sellSettlement?.AccountId,

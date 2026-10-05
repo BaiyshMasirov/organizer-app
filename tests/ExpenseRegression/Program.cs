@@ -85,6 +85,11 @@ var expenseList = new organaizer.Pages.Expenses.IndexModel(db);
 await expenseList.OnGetAsync(company.Id,2026,10,null);
 Check(expenseList.UsdAmounts[saved.Id]==10m,"Expense list displays legacy KGS dollar equivalent");
 
+var copyPage = new organaizer.Pages.Operations.CreateModel(new Dispatcher(new ServiceCollection().BuildServiceProvider()),db,active);
+await copyPage.OnGetAsync(older.Id);
+Check(copyPage.IsCopy && copyPage.Input.OccurredAt==DateTime.Today,"Copied operation defaults to today");
+Check(copyPage.Input.SellAmount==older.SellAmount && copyPage.Input.BuyAmount==older.BuyAmount,"Copy preserves both entered amounts");
+
 sealed class TestSession : ISession
 {
     readonly Dictionary<string,byte[]> values=new();
