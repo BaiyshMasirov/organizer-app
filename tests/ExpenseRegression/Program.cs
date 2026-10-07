@@ -2,11 +2,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using OfficeOpenXml;
 using organaizer.Application;
 using organaizer.Domain;
 using organaizer.Infrastructure;
 using organaizer.Pages.Expenses;
 
+ExcelPackage.License.SetNonCommercialOrganization("Finance Flow Tests");
 var accessor = new HttpContextAccessor();
 using var db = new FinanceDbContext(new DbContextOptionsBuilder<FinanceDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, accessor);
 var company = new Company { Id=Guid.NewGuid(), Name="Orient", Kind=CompanyKind.Broker };
@@ -74,6 +76,15 @@ await operationsPage.OnGetAsync("алтын",null,null,null,null,null,"dateAsc")
 Check(operationsPage.Items.Select(x=>x.Id).SequenceEqual(new[]{older.Id,newer.Id}),"Ascending order preserves creation chronology");
 await operationsPage.OnGetAsync("RUB",null,null,null,null,null,null);
 Check(operationsPage.TotalCount==3,"Currency search remains available");
+older.Status=OperationStatus.Cancelled;
+await db.SaveChangesAsync();
+var operationsExport=(FileContentResult)await operationsPage.OnGetExportAsync(null,null,null,null,null,null);
+using(var operationsPackage=new ExcelPackage(new MemoryStream(operationsExport.FileContents)))
+{
+    var sheet=operationsPackage.Workbook.Worksheets[0];
+    Check(sheet.Cells[1,1].Text=="№ п/п" && sheet.Cells[2,1].GetValue<int>()==1,"Operations export contains row numbering");
+    Check(sheet.Dimension.Rows==3,"Cancelled operation is excluded from Excel export");
+}
 
 var previewPage = new CreateModel(db,active);
 var preview = (JsonResult)await previewPage.OnGetConvertAsync(875m,"KGS",date);
@@ -102,6 +113,20 @@ db.ExchangeRates.AddRange(
 await db.SaveChangesAsync();
 Check(await AaExchangeRateService.MarketRateAsync(db,"BUY_USDT_RUB",date)==80.24m && await AaExchangeRateService.MarketRateAsync(db,"SELL_USDT_RUB",date)==80.24m,"Purchase and sale load the same RUB/USDT market rate");
 Check(await AaExchangeRateService.MarketRateAsync(db,"BUY_AED_RUB",date)==20m,"AED/RUB rate is loaded as RUB per AED");
+
+var movementDate=new DateTime(2026,9,15);
+var movementInstant=organaizer.Pages.Balance.IndexModel.MovementInstant(movementDate);
+Check(movementInstant.Date==movementDate.Date && movementInstant.Offset==TimeSpan.FromHours(5),"Transfer and conversion dates use Almaty local date");
+db.AccountMovements.Add(new AccountMovement { Id=Guid.NewGuid(), CompanyId=company.Id, AccountId=usd.Id, GroupId=Guid.NewGuid(), Kind=AccountMovementKind.Transfer, OccurredAt=movementInstant, Amount=500m, Currency="USD", Note="Test transfer" });
+await db.SaveChangesAsync();
+var historyPage=new organaizer.Pages.Balance.HistoryModel(db,active) { AccountId=usd.Id };
+var historyExport=(FileContentResult)await historyPage.OnGetExportAsync();
+using(var historyPackage=new ExcelPackage(new MemoryStream(historyExport.FileContents)))
+{
+    var sheet=historyPackage.Workbook.Worksheets[0];
+    Check(sheet.Cells[1,1].Text=="№ п/п" && sheet.Cells[1,2].Text=="Дата","Balance history export contains numbering and date");
+    Check(sheet.Cells[2,2].GetValue<DateTime>().Date==movementDate.Date,"Selected movement date is displayed in balance history export");
+}
 
 sealed class TestSession : ISession
 {

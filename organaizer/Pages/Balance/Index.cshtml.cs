@@ -10,6 +10,7 @@ namespace organaizer.Pages.Balance;
 
 public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : PageModel
 {
+    private static readonly TimeSpan AlmatyOffset = TimeSpan.FromHours(5);
     public List<MoneyAccount> Items { get; private set; } = [];
     public List<MoneyAccount> AllItems { get; private set; } = [];
     public List<string> FilterCurrencies { get; private set; } = [];
@@ -18,6 +19,7 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
     public Dictionary<Guid, decimal> Balances { get; private set; } = [];
     public List<ConversionBankOption> ConversionBanks { get; private set; } = [];
     public Domain.Company ActiveCompany { get; private set; } = null!;
+    public string TodayAlmaty => DateTimeOffset.UtcNow.ToOffset(AlmatyOffset).ToString("yyyy-MM-dd");
 
     [BindProperty]
     public InputModel Input { get; set; } = new();
@@ -84,19 +86,20 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
         return RedirectToPage();
     }
 
-    public async Task<IActionResult> OnPostTransferAsync(Guid fromAccountId, Guid toAccountId, decimal amount, string? note)
+    public async Task<IActionResult> OnPostTransferAsync(Guid fromAccountId, Guid toAccountId, decimal amount, DateTime occurredAt, string? note)
     {
         var accounts = await db.Accounts.Where(x => x.CompanyId == active.RequiredId && (x.Id == fromAccountId || x.Id == toAccountId)).ToListAsync();
         var from = accounts.SingleOrDefault(x => x.Id == fromAccountId); var to = accounts.SingleOrDefault(x => x.Id == toAccountId);
         if (from is null || to is null || from.Id == to.Id || from.Currency != to.Currency || amount <= 0)
             return BalanceError("Выберите два разных счета в одной валюте и укажите сумму.");
+        if (occurredAt == default) return BalanceError("Укажите дату перевода.");
         var available = await BalanceCalculator.GetAsync(db, from.Id);
         if (available < amount) return Insufficient(from.Name, available, amount, from.Currency);
-        await AddMovementPair(from, to, amount, amount, AccountMovementKind.Transfer, note);
+        await AddMovementPair(from, to, amount, amount, AccountMovementKind.Transfer, MovementInstant(occurredAt), note);
         TempData["Success"] = "Перевод выполнен"; return RedirectToPage();
     }
 
-    public async Task<IActionResult> OnPostConvertAsync(string bankKey, Guid fromAccountId, Guid toAccountId, decimal fromAmount, decimal toAmount, string? note)
+    public async Task<IActionResult> OnPostConvertAsync(string bankKey, Guid fromAccountId, Guid toAccountId, decimal fromAmount, decimal toAmount, DateTime occurredAt, string? note)
     {
         var accounts = await db.Accounts.Include(x => x.FinancialInstitution)
             .Where(x => x.CompanyId == active.RequiredId && (x.Id == fromAccountId || x.Id == toAccountId)).ToListAsync();
@@ -106,24 +109,28 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
             !ConversionBankKey(to).Equals(bankKey, StringComparison.OrdinalIgnoreCase) ||
             from.Currency == to.Currency || fromAmount <= 0 || toAmount <= 0)
             return BalanceError("Для конвертации выберите две разные валюты в одном банке.");
+        if (occurredAt == default) return BalanceError("Укажите дату конвертации.");
         var available = await BalanceCalculator.GetAsync(db, from.Id);
         if (available < fromAmount) return Insufficient(from.Name, available, fromAmount, from.Currency);
-        await AddMovementPair(from, to, fromAmount, toAmount, AccountMovementKind.Conversion, note);
+        await AddMovementPair(from, to, fromAmount, toAmount, AccountMovementKind.Conversion, MovementInstant(occurredAt), note);
         TempData["Success"] = $"Конвертация {from.Currency} → {to.Currency} выполнена"; return RedirectToPage();
     }
 
-    private async Task AddMovementPair(MoneyAccount from, MoneyAccount to, decimal fromAmount, decimal toAmount, AccountMovementKind kind, string? note)
+    private async Task AddMovementPair(MoneyAccount from, MoneyAccount to, decimal fromAmount, decimal toAmount, AccountMovementKind kind, DateTimeOffset occurredAt, string? note)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(); var groupId = Guid.NewGuid(); var now = DateTimeOffset.UtcNow;
+        await using var transaction = await db.Database.BeginTransactionAsync(); var groupId = Guid.NewGuid();
         db.AccountMovements.AddRange(
-            new AccountMovement { Id=Guid.NewGuid(), CompanyId=active.RequiredId, AccountId=from.Id, GroupId=groupId, Kind=kind, OccurredAt=now, Amount=-fromAmount, Currency=from.Currency, Note=note?.Trim() },
-            new AccountMovement { Id=Guid.NewGuid(), CompanyId=active.RequiredId, AccountId=to.Id, GroupId=groupId, Kind=kind, OccurredAt=now, Amount=toAmount, Currency=to.Currency, Note=note?.Trim() });
+            new AccountMovement { Id=Guid.NewGuid(), CompanyId=active.RequiredId, AccountId=from.Id, GroupId=groupId, Kind=kind, OccurredAt=occurredAt, Amount=-fromAmount, Currency=from.Currency, Note=note?.Trim() },
+            new AccountMovement { Id=Guid.NewGuid(), CompanyId=active.RequiredId, AccountId=to.Id, GroupId=groupId, Kind=kind, OccurredAt=occurredAt, Amount=toAmount, Currency=to.Currency, Note=note?.Trim() });
         await db.SaveChangesAsync(); await transaction.CommitAsync();
     }
 
     private IActionResult Insufficient(string account, decimal available, decimal requested, string currency)
     { TempData["BalanceError"] = $"На счете «{account}» не хватает средств. Доступно {available:N2} {currency}, требуется {requested:N2} {currency}."; return RedirectToPage(); }
     private IActionResult BalanceError(string message) { TempData["BalanceError"] = message; return RedirectToPage(); }
+
+    public static DateTimeOffset MovementInstant(DateTime date) =>
+        new(DateTime.SpecifyKind(date.Date, DateTimeKind.Unspecified), AlmatyOffset);
 
     private async Task LoadAsync()
     {

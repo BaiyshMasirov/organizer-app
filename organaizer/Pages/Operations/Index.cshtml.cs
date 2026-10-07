@@ -49,28 +49,31 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
     public async Task<IActionResult> OnGetExportAsync(string? search, string? typeCode, string? status, DateTime? from, DateTime? to, string? sort)
     {
         SetFilters(search, typeCode, status, from, to, sort);
-        var items = await ApplySorting(BuildQuery(Search, TypeCode, Status, From, To), Sort).ToListAsync();
+        var items = await ApplySorting(
+            BuildQuery(Search, TypeCode, Status, From, To).Where(x => x.Status != OperationStatus.Cancelled), Sort)
+            .ToListAsync();
 
         using var package = new ExcelPackage();
         var sheet = package.Workbook.Worksheets.Add("Операции");
-        var headers = new[] { "Дата", "Тип / клиент", "Отдаем", "Откуда отправляем", "Получаем", "Куда получаем", "Курс (деньги / товар)", "Прибыль" };
+        var headers = new[] { "№ п/п", "Дата", "Тип / клиент", "Отдаем", "Откуда отправляем", "Получаем", "Куда получаем", "Курс (деньги / товар)", "Прибыль" };
         for (var column = 1; column <= headers.Length; column++) sheet.Cells[1, column].Value = headers[column - 1];
 
         for (var index = 0; index < items.Count; index++)
         {
             var row = index + 2;
             var operation = items[index];
-            sheet.Cells[row, 1].Value = operation.OccurredAt.DateTime;
-            sheet.Cells[row, 1].Style.Numberformat.Format = "dd.mm.yyyy";
-            sheet.Cells[row, 2].Value = $"{OperationTypes.All.GetValueOrDefault(operation.TypeCode, operation.TypeCode)}\n{operation.Counterparty?.Name ?? "Без клиента"}";
-            sheet.Cells[row, 2].Style.WrapText = true;
-            SetMoneyCell(sheet.Cells[row, 3], operation.SellAmount, operation.SellCurrency);
-            sheet.Cells[row, 4].Value = operation.SourceAccount ?? "—";
-            SetMoneyCell(sheet.Cells[row, 5], operation.BuyAmount, operation.BuyCurrency);
-            sheet.Cells[row, 6].Value = operation.DestinationAccount ?? "—";
+            sheet.Cells[row, 1].Value = index + 1;
+            sheet.Cells[row, 2].Value = operation.OccurredAt.DateTime;
+            sheet.Cells[row, 2].Style.Numberformat.Format = "dd.mm.yyyy";
+            sheet.Cells[row, 3].Value = $"{OperationTypes.All.GetValueOrDefault(operation.TypeCode, operation.TypeCode)}\n{operation.Counterparty?.Name ?? "Без клиента"}";
+            sheet.Cells[row, 3].Style.WrapText = true;
+            SetMoneyCell(sheet.Cells[row, 4], operation.SellAmount, operation.SellCurrency);
+            sheet.Cells[row, 5].Value = operation.SourceAccount ?? "—";
+            SetMoneyCell(sheet.Cells[row, 6], operation.BuyAmount, operation.BuyCurrency);
+            sheet.Cells[row, 7].Value = operation.DestinationAccount ?? "—";
             var rate = OperationTypes.CanonicalRate(operation.TypeCode, operation.SellCurrency, operation.SellAmount, operation.BuyCurrency, operation.BuyAmount);
-            sheet.Cells[row, 7].Value = rate.HasValue ? $"{rate.Value:N8} {OperationTypes.RateLabel(operation.TypeCode)}" : "—";
-            SetMoneyCell(sheet.Cells[row, 8], operation.BaseCurrencyProfit, "USD");
+            sheet.Cells[row, 8].Value = rate.HasValue ? $"{rate.Value:N8} {OperationTypes.RateLabel(operation.TypeCode)}" : "—";
+            SetMoneyCell(sheet.Cells[row, 9], operation.BaseCurrencyProfit, "USD");
         }
 
         using (var header = sheet.Cells[1, 1, 1, headers.Length])
@@ -84,15 +87,17 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
         sheet.Row(1).Height = 24;
         sheet.View.FreezePanes(2, 1);
         sheet.Cells[1, 1, Math.Max(items.Count + 1, 1), headers.Length].AutoFilter = true;
-        sheet.Column(1).Width = 14;
-        sheet.Column(2).Width = 42;
-        sheet.Column(3).Width = 22;
-        sheet.Column(4).Width = 24;
-        sheet.Column(5).Width = 22;
-        sheet.Column(6).Width = 24;
-        sheet.Column(7).Width = 28;
-        sheet.Column(8).Width = 20;
-        sheet.Cells[2, 3, Math.Max(items.Count + 1, 2), 8].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
+        sheet.Column(1).Width = 9;
+        sheet.Column(2).Width = 14;
+        sheet.Column(3).Width = 42;
+        sheet.Column(4).Width = 22;
+        sheet.Column(5).Width = 24;
+        sheet.Column(6).Width = 22;
+        sheet.Column(7).Width = 24;
+        sheet.Column(8).Width = 28;
+        sheet.Column(9).Width = 20;
+        sheet.Cells[2, 1, Math.Max(items.Count + 1, 2), 2].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+        sheet.Cells[2, 4, Math.Max(items.Count + 1, 2), 9].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
         sheet.Cells[1, 1, Math.Max(items.Count + 1, 1), headers.Length].Style.VerticalAlignment = ExcelVerticalAlignment.Center;
 
         var fileName = $"operations_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";

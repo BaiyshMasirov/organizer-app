@@ -1,6 +1,9 @@
+using System.Drawing;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using OfficeOpenXml;
+using OfficeOpenXml.Style;
 using organaizer.Domain;
 using organaizer.Infrastructure;
 
@@ -27,11 +30,63 @@ public sealed class HistoryModel(FinanceDbContext db, ActiveCompany active) : Pa
     public List<string> Types { get; private set; } = [];
     public List<string> Currencies { get; private set; } = [];
 
-    public async Task<IActionResult> OnGetAsync()
+    public async Task<IActionResult> OnGetAsync() => await LoadAsync() ? Page() : NotFound();
+
+    public async Task<IActionResult> OnGetExportAsync()
+    {
+        if (!await LoadAsync()) return NotFound();
+
+        using var package = new ExcelPackage();
+        var sheet = package.Workbook.Worksheets.Add("История");
+        var headers = new[] { "№ п/п", "Дата", "Счёт", "Тип операции", "Описание", "Валюта", "Движение", "Остаток" };
+        for (var column = 1; column <= headers.Length; column++) sheet.Cells[1, column].Value = headers[column - 1];
+
+        for (var index = 0; index < Items.Count; index++)
+        {
+            var row = index + 2;
+            var item = Items[index];
+            sheet.Cells[row, 1].Value = index + 1;
+            sheet.Cells[row, 2].Value = item.OccurredAt.ToOffset(AlmatyOffset).DateTime;
+            sheet.Cells[row, 2].Style.Numberformat.Format = "dd.mm.yyyy hh:mm";
+            sheet.Cells[row, 3].Value = item.Account;
+            sheet.Cells[row, 4].Value = item.Type;
+            sheet.Cells[row, 5].Value = string.IsNullOrWhiteSpace(item.Description) ? "—" : item.Description;
+            sheet.Cells[row, 6].Value = item.Currency;
+            SetMoneyCell(sheet.Cells[row, 7], item.Amount, item.Currency);
+            SetMoneyCell(sheet.Cells[row, 8], item.Balance, item.Currency);
+        }
+
+        using (var header = sheet.Cells[1, 1, 1, headers.Length])
+        {
+            header.Style.Font.Bold = true;
+            header.Style.Font.Color.SetColor(Color.White);
+            header.Style.Fill.PatternType = ExcelFillStyle.Solid;
+            header.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(31, 78, 121));
+            header.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+        }
+        sheet.View.FreezePanes(2, 1);
+        sheet.Cells[1, 1, Math.Max(Items.Count + 1, 1), headers.Length].AutoFilter = true;
+        sheet.Column(1).Width = 9;
+        sheet.Column(2).Width = 20;
+        sheet.Column(3).Width = 28;
+        sheet.Column(4).Width = 28;
+        sheet.Column(5).Width = 42;
+        sheet.Column(6).Width = 12;
+        sheet.Column(7).Width = 22;
+        sheet.Column(8).Width = 22;
+        sheet.Cells[2, 1, Math.Max(Items.Count + 1, 2), 2].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+        sheet.Cells[2, 7, Math.Max(Items.Count + 1, 2), 8].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
+        sheet.Cells[1, 1, Math.Max(Items.Count + 1, 1), headers.Length].Style.VerticalAlignment = ExcelVerticalAlignment.Center;
+
+        return File(package.GetAsByteArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"balance_history_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
+    }
+
+    private async Task<bool> LoadAsync()
     {
         var accounts = await db.Accounts.AsNoTracking().Include(x => x.FinancialInstitution)
             .Where(x => x.IsActive && x.CompanyId == active.RequiredId).ToListAsync();
-        if (AccountId.HasValue && accounts.All(x => x.Id != AccountId.Value)) return NotFound();
+        if (AccountId.HasValue && accounts.All(x => x.Id != AccountId.Value)) return false;
         if (AccountId.HasValue)
         {
             var selected = accounts.Single(x => x.Id == AccountId.Value);
@@ -91,8 +146,15 @@ public sealed class HistoryModel(FinanceDbContext db, ActiveCompany active) : Pa
                 (!fromInstant.HasValue || x.OccurredAt >= fromInstant.Value) &&
                 (!toInstant.HasValue || x.OccurredAt < toInstant.Value))
             .OrderByDescending(x => x.OccurredAt).ThenBy(x => x.Account).ToList();
-        return Page();
+        return true;
     }
 
     public static string LocalDate(DateTimeOffset value) => value.ToOffset(AlmatyOffset).ToString("dd.MM.yyyy HH:mm");
+
+    private static void SetMoneyCell(ExcelRange cell, decimal amount, string currency)
+    {
+        cell.Value = amount;
+        var safeCurrency = currency.Replace("\"", "\"\"");
+        cell.Style.Numberformat.Format = $"#,##0.00 \"{safeCurrency}\"";
+    }
 }

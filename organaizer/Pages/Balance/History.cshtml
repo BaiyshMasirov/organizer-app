@@ -4,7 +4,7 @@
 
 <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
   <div><h1 class="mb-1">История движений</h1><div class="text-secondary">@Model.AccountTitle</div></div>
-  <a asp-page="/Balance/Index" class="btn btn-outline-secondary">← К балансу</a>
+  <div class="btn-list"><a asp-page-handler="Export" asp-route-accountId="@Model.AccountId" asp-route-type="@Model.Type" asp-route-from="@Model.From?.ToString("yyyy-MM-dd")" asp-route-to="@Model.To?.ToString("yyyy-MM-dd")" asp-route-currency="@Model.Currency" class="btn btn-outline-success">↓ Выгрузить в Excel</a><a asp-page="/Balance/Index" class="btn btn-outline-secondary">← К балансу</a></div>
 </div>
 
 <form method="get" class="card card-body mb-4">
