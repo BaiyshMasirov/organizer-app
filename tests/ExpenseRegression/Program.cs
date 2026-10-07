@@ -90,6 +90,19 @@ await copyPage.OnGetAsync(older.Id);
 Check(copyPage.IsCopy && copyPage.Input.OccurredAt==DateTime.Today,"Copied operation defaults to today");
 Check(copyPage.Input.SellAmount==older.SellAmount && copyPage.Input.BuyAmount==older.BuyAmount,"Copy preserves both entered amounts");
 
+var buyUsdtAedRate=OperationTypes.CanonicalRate("BUY_USDT_AED","AED",11690000m,"USDT",3181230.93m);
+var sellUsdtAedRate=OperationTypes.CanonicalRate("SELL_USDT_AED","USDT",1816038.84m,"AED",6683311.67m);
+Check(buyUsdtAedRate is >3.67m and <3.68m,"USDT/AED purchase rate is AED per USDT");
+Check(sellUsdtAedRate is >3.67m and <3.69m,"USDT/AED sale rate keeps the same AED per USDT direction");
+Check(!OperationTypes.MultiplyRate("BUY_USDT_RUB") && OperationTypes.MultiplyRate("SELL_USDT_RUB"),"Purchases divide by price and sales multiply by price");
+Check(OperationTypes.Pair("BUY_AED_RUB") == ("RUB","AED") && OperationTypes.Pair("SELL_AED_RUB") == ("AED","RUB"),"Both AED/RUB conversion directions are available");
+db.ExchangeRates.AddRange(
+    new ExchangeRate { Id=Guid.NewGuid(), Currency="RUB", EffectiveAt=new DateTimeOffset(date,TimeSpan.Zero), SourceOrder=1, RateToUsd=.0125m },
+    new ExchangeRate { Id=Guid.NewGuid(), Currency="AED", EffectiveAt=new DateTimeOffset(date,TimeSpan.Zero), SourceOrder=1, RateToUsd=.25m });
+await db.SaveChangesAsync();
+Check(await AaExchangeRateService.MarketRateAsync(db,"BUY_USDT_RUB",date)==80.24m && await AaExchangeRateService.MarketRateAsync(db,"SELL_USDT_RUB",date)==80.24m,"Purchase and sale load the same RUB/USDT market rate");
+Check(await AaExchangeRateService.MarketRateAsync(db,"BUY_AED_RUB",date)==20m,"AED/RUB rate is loaded as RUB per AED");
+
 sealed class TestSession : ISession
 {
     readonly Dictionary<string,byte[]> values=new();

@@ -76,16 +76,16 @@ public static class SeedData
             {
                 Id = Guid.NewGuid(), Currency = "USDT",
                 EffectiveAt = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero),
-                SourceOrder = 1_900_000, RateToUsd = 1m / AaExchangeRateService.UsdToUsdt,
-                Note = "Постоянный курс A&A: 1 USD = 1,003 USDT",
+                SourceOrder = 1_900_000, RateToUsd = AaExchangeRateService.UsdtToUsd,
+                Note = "Постоянный курс A&A: 1 USDT = 1,003 USD",
                 ImportKey = AaExchangeRateService.UsdtImportKey
             });
             await db.SaveChangesAsync();
         }
-        else if (rate.RateToUsd != 1m / AaExchangeRateService.UsdToUsdt)
+        else if (rate.RateToUsd != AaExchangeRateService.UsdtToUsd)
         {
-            rate.RateToUsd = 1m / AaExchangeRateService.UsdToUsdt;
-            rate.Note = "Постоянный курс A&A: 1 USD = 1,003 USDT";
+            rate.RateToUsd = AaExchangeRateService.UsdtToUsd;
+            rate.Note = "Постоянный курс A&A: 1 USDT = 1,003 USD";
             await db.SaveChangesAsync();
         }
     }

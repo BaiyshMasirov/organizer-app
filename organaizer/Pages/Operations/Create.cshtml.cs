@@ -56,7 +56,8 @@ public sealed class CreateModel(Dispatcher dispatcher, FinanceDbContext db, Acti
             CompanyId=active.RequiredId, CounterpartyId=source.CounterpartyId, TypeCode=source.TypeCode,
             OccurredAt=DateTime.Today, DueAt=source.DueAt?.Date, SellCurrency=source.SellCurrency,
             SellAmount=source.SellAmount, BuyCurrency=source.BuyCurrency, BuyAmount=source.BuyAmount,
-            ExchangeRate=source.ExchangeRate, FeeAmount=source.FeeAmount, FeeCurrency=source.FeeCurrency,
+            ExchangeRate=OperationTypes.CanonicalRate(source.TypeCode, source.SellCurrency, source.SellAmount, source.BuyCurrency, source.BuyAmount) ?? source.ExchangeRate,
+            FeeAmount=source.FeeAmount, FeeCurrency=source.FeeCurrency,
             BaseCurrencyProfit=source.BaseCurrencyProfit, SellAccountId=sellSettlement?.AccountId,
             BuyAccountId=buySettlement?.AccountId, Note=source.Note
         };
@@ -67,15 +68,17 @@ public sealed class CreateModel(Dispatcher dispatcher, FinanceDbContext db, Acti
         return Page();
     }
 
-    public async Task<JsonResult> OnGetRateAsync(string sellCurrency, string buyCurrency, DateTime date)
+    public async Task<JsonResult> OnGetRateAsync(string typeCode, DateTime date)
     {
-        var rate = await AaExchangeRateService.PairRateAsync(db, sellCurrency, buyCurrency, date);
+        var market = OperationTypes.MarketPair(typeCode);
+        var rate = await AaExchangeRateService.MarketRateAsync(db, typeCode, date);
         return new JsonResult(new
         {
             found = rate.HasValue,
             rate,
-            source = sellCurrency.Equals("RUB", StringComparison.OrdinalIgnoreCase) || buyCurrency.Equals("RUB", StringComparison.OrdinalIgnoreCase)
-                ? "ЦБ РФ" : "справочник A&A"
+            mode = OperationTypes.MultiplyRate(typeCode) ? "multiply" : "divide",
+            label = OperationTypes.RateLabel(typeCode),
+            source = market.Base == "RUB" || market.Quote == "RUB" ? "ЦБ РФ" : "справочник A&A"
         });
     }
 
@@ -113,7 +116,7 @@ public sealed class CreateModel(Dispatcher dispatcher, FinanceDbContext db, Acti
 
         if (companyKind == CompanyKind.LiquidityProvider && !oneSidedIncome && (!Input.ExchangeRate.HasValue || Input.ExchangeRate <= 0))
         {
-            Input.ExchangeRate = await AaExchangeRateService.PairRateAsync(db, Input.SellCurrency, Input.BuyCurrency, Input.OccurredAt);
+            Input.ExchangeRate = await AaExchangeRateService.MarketRateAsync(db, Input.TypeCode, Input.OccurredAt);
             ModelState.Remove("Input.ExchangeRate");
             if (!Input.ExchangeRate.HasValue)
                 ModelState.AddModelError("Input.ExchangeRate", "Обменный курс на дату операции не найден");

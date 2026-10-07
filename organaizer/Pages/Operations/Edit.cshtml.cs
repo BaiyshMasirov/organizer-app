@@ -50,7 +50,9 @@ public sealed class EditModel(Dispatcher dispatcher, FinanceDbContext db, Active
             Id=x.Id, CompanyId=x.CompanyId, CounterpartyId=x.CounterpartyId, TypeCode=x.TypeCode,
             OccurredAt=x.OccurredAt.DateTime, DueAt=x.DueAt?.DateTime, SellCurrency=x.SellCurrency,
             SellAmount=x.SellAmount, BuyCurrency=x.BuyCurrency, BuyAmount=x.BuyAmount, FeeAmount=x.FeeAmount,
-            FeeCurrency=x.FeeCurrency, ExchangeRate=x.ExchangeRate, BaseCurrencyProfit=x.BaseCurrencyProfit,
+            FeeCurrency=x.FeeCurrency,
+            ExchangeRate=OperationTypes.CanonicalRate(x.TypeCode, x.SellCurrency, x.SellAmount, x.BuyCurrency, x.BuyAmount) ?? x.ExchangeRate,
+            BaseCurrencyProfit=x.BaseCurrencyProfit,
             SellAccountId=x.Settlements.Where(s => s.Amount < 0).OrderBy(s => s.OccurredAt).Select(s => (Guid?)s.AccountId).FirstOrDefault(),
             BuyAccountId=x.Settlements.Where(s => s.Amount > 0).OrderBy(s => s.OccurredAt).Select(s => (Guid?)s.AccountId).FirstOrDefault(),
             Note=x.Note
@@ -60,13 +62,16 @@ public sealed class EditModel(Dispatcher dispatcher, FinanceDbContext db, Active
         return Page();
     }
 
-    public async Task<JsonResult> OnGetRateAsync(string sellCurrency, string buyCurrency, DateTime date)
+    public async Task<JsonResult> OnGetRateAsync(string typeCode, DateTime date)
     {
-        var rate = await AaExchangeRateService.PairRateAsync(db, sellCurrency, buyCurrency, date);
+        var market = OperationTypes.MarketPair(typeCode);
+        var rate = await AaExchangeRateService.MarketRateAsync(db, typeCode, date);
         return new JsonResult(new
         {
             found=rate.HasValue, rate,
-            source=sellCurrency.Equals("RUB", StringComparison.OrdinalIgnoreCase) || buyCurrency.Equals("RUB", StringComparison.OrdinalIgnoreCase) ? "ЦБ РФ" : "справочник A&A"
+            mode=OperationTypes.MultiplyRate(typeCode) ? "multiply" : "divide",
+            label=OperationTypes.RateLabel(typeCode),
+            source=market.Base == "RUB" || market.Quote == "RUB" ? "ЦБ РФ" : "справочник A&A"
         });
     }
 
@@ -95,7 +100,7 @@ public sealed class EditModel(Dispatcher dispatcher, FinanceDbContext db, Active
 
         if (companyKind == CompanyKind.LiquidityProvider && !oneSidedIncome && (!Input.ExchangeRate.HasValue || Input.ExchangeRate <= 0))
         {
-            Input.ExchangeRate = await AaExchangeRateService.PairRateAsync(db, Input.SellCurrency, Input.BuyCurrency, Input.OccurredAt);
+            Input.ExchangeRate = await AaExchangeRateService.MarketRateAsync(db, Input.TypeCode, Input.OccurredAt);
             ModelState.Remove("Input.ExchangeRate");
             if (!Input.ExchangeRate.HasValue) ModelState.AddModelError("Input.ExchangeRate", "Обменный курс на дату операции не найден");
         }

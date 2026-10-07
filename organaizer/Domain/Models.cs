@@ -138,7 +138,7 @@ public sealed class ExchangeRate
     [MaxLength(5)] public required string Currency { get; set; }
     public DateTimeOffset EffectiveAt { get; set; }
     public int SourceOrder { get; set; }
-    /// <summary>Стоимость одной единицы валюты в USDT.</summary>
+    /// <summary>Стоимость одной единицы валюты в USD.</summary>
     public decimal RateToUsd { get; set; }
     [MaxLength(300)] public string? Note { get; set; }
     [MaxLength(300)] public string? ImportKey { get; set; }
@@ -220,7 +220,10 @@ public static class OperationTypes
         ["BUY_USDT_USD"]="Покупка USDT/USD", ["SELL_USDT_USD"]="Продажа USDT/USD",
         ["BUY_USDT_AED"]="Покупка USDT/AED", ["SELL_USDT_AED"]="Продажа USDT/AED",
         ["BUY_USDT_RUB"]="Покупка USDT/RUB", ["SELL_USDT_RUB"]="Продажа USDT/RUB",
-        ["BUY_USD_RUB"]="Покупка USD/RUB", ["SELL_USD_RUB"]="Продажа USD/RUB",
+        ["BUY_USD_RUB"]="Конвертация USD/RUB · Покупка USD / продажа RUB",
+        ["SELL_USD_RUB"]="Конвертация USD/RUB · Продажа USD / покупка RUB",
+        ["BUY_AED_RUB"]="Конвертация AED/RUB · Покупка AED / продажа RUB",
+        ["SELL_AED_RUB"]="Конвертация AED/RUB · Продажа AED / покупка RUB",
         ["CREDIT_USDT"]="Кредит USDT/USDT", ["LIQUIDITY_USDT"]="Ликвидность USDT/USDT",
         ["SELL_USD_AED"]="Конвертация (продажа) USD/AED", ["BUY_USD_AED"]="Конвертация (покупка) USD/AED",
         ["OTHER_INCOME_COMMISSION"]="Прочий приход (Комиссия)"
@@ -231,12 +234,47 @@ public static class OperationTypes
         "BUY_USDT_AED" => ("AED","USDT"), "SELL_USDT_AED" => ("USDT","AED"),
         "BUY_USDT_RUB" => ("RUB","USDT"), "SELL_USDT_RUB" => ("USDT","RUB"),
         "BUY_USD_RUB" => ("RUB","USD"), "SELL_USD_RUB" => ("USD","RUB"),
+        "BUY_AED_RUB" => ("RUB","AED"), "SELL_AED_RUB" => ("AED","RUB"),
         "SELL_USD_AED" => ("USD","AED"), "BUY_USD_AED" => ("AED","USD"),
         "OTHER_INCOME_COMMISSION" => ("USD","USD"),
         _ => ("USDT","USDT")
     };
     public static bool IsOneSidedIncome(string code) => code == "OTHER_INCOME_COMMISSION";
     public static string PairLabel(string code){var p=Pair(code);return $"{p.Sell}/{p.Buy}";}
+
+    /// <summary>
+    /// Рыночная пара: товар (Base) и деньги, в которых выражена его цена (Quote).
+    /// Курс всегда показывается одинаково для покупки и продажи: Quote за 1 Base.
+    /// </summary>
+    public static (string Base, string Quote) MarketPair(string code) => code switch
+    {
+        "BUY_USDT_USD" or "SELL_USDT_USD" => ("USDT", "USD"),
+        "BUY_USDT_AED" or "SELL_USDT_AED" => ("USDT", "AED"),
+        "BUY_USDT_RUB" or "SELL_USDT_RUB" => ("USDT", "RUB"),
+        "BUY_USD_RUB" or "SELL_USD_RUB" => ("USD", "RUB"),
+        "SELL_USD_AED" or "BUY_USD_AED" => ("USD", "AED"),
+        "BUY_AED_RUB" or "SELL_AED_RUB" => ("AED", "RUB"),
+        _ => Pair(code) is var pair ? (pair.Buy, pair.Sell) : ("USDT", "USD")
+    };
+
+    public static string RateLabel(string code)
+    {
+        var pair = MarketPair(code);
+        return $"{pair.Quote} / {pair.Base}";
+    }
+
+    public static bool MultiplyRate(string code) => Pair(code).Sell == MarketPair(code).Base;
+
+    public static decimal? CanonicalRate(string code, string sellCurrency, decimal sellAmount, string buyCurrency, decimal buyAmount)
+    {
+        if (sellAmount <= 0 || buyAmount <= 0) return null;
+        var market = MarketPair(code);
+        var baseAmount = sellCurrency.Equals(market.Base, StringComparison.OrdinalIgnoreCase) ? sellAmount
+            : buyCurrency.Equals(market.Base, StringComparison.OrdinalIgnoreCase) ? buyAmount : 0;
+        var quoteAmount = sellCurrency.Equals(market.Quote, StringComparison.OrdinalIgnoreCase) ? sellAmount
+            : buyCurrency.Equals(market.Quote, StringComparison.OrdinalIgnoreCase) ? buyAmount : 0;
+        return baseAmount > 0 && quoteAmount > 0 ? quoteAmount / baseAmount : null;
+    }
 }
 
 public static class OperationStatuses
