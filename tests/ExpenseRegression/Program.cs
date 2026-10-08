@@ -13,9 +13,10 @@ var accessor = new HttpContextAccessor();
 using var db = new FinanceDbContext(new DbContextOptionsBuilder<FinanceDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, accessor);
 var company = new Company { Id=Guid.NewGuid(), Name="Orient", Kind=CompanyKind.Broker };
 var usd = new MoneyAccount { Id=Guid.NewGuid(), CompanyId=company.Id, Name="USD", Currency="USD" };
+var usdReserve = new MoneyAccount { Id=Guid.NewGuid(), CompanyId=company.Id, Name="USD Reserve", Currency="USD" };
 var kgs = new MoneyAccount { Id=Guid.NewGuid(), CompanyId=company.Id, Name="KGS", Currency="KGS" };
 var date = new DateTime(2026,10,2);
-db.AddRange(company,usd,kgs);
+db.AddRange(company,usd,usdReserve,kgs);
 db.NbkrExchangeRates.Add(new() { Id=Guid.NewGuid(), Currency="USD", EffectiveAt=new DateTimeOffset(date,TimeSpan.Zero), Feed="test", Nominal=1, ValueInKgs=87.5m });
 db.NbkrExchangeRates.Add(new() { Id=Guid.NewGuid(), Currency="USD", EffectiveAt=new DateTimeOffset(date.AddDays(1),TimeSpan.Zero), Feed="test", Nominal=1, ValueInKgs=100m });
 await db.SaveChangesAsync();
@@ -84,6 +85,8 @@ using(var operationsPackage=new ExcelPackage(new MemoryStream(operationsExport.F
     var sheet=operationsPackage.Workbook.Worksheets[0];
     Check(sheet.Cells[1,1].Text=="№ п/п" && sheet.Cells[2,1].GetValue<int>()==1,"Operations export contains row numbering");
     Check(sheet.Dimension.Rows==3,"Cancelled operation is excluded from Excel export");
+    Check(sheet.Cells[1,5].Text=="Валюта отдаём" && sheet.Cells[1,8].Text=="Валюта получаем" && sheet.Cells[1,12].Text=="Валюта прибыли","Operations export separates currency into filterable columns");
+    Check(sheet.Cells[2,4].Value is not string && !sheet.Cells[2,4].Style.Numberformat.Format.Contains("USD"),"Operations export keeps amounts numeric without currency text");
 }
 
 var previewPage = new CreateModel(db,active);
@@ -117,15 +120,27 @@ Check(await AaExchangeRateService.MarketRateAsync(db,"BUY_AED_RUB",date)==20m,"A
 var movementDate=new DateTime(2026,9,15);
 var movementInstant=organaizer.Pages.Balance.IndexModel.MovementInstant(movementDate);
 Check(movementInstant.Date==movementDate.Date && movementInstant.Offset==TimeSpan.FromHours(5),"Transfer and conversion dates use Almaty local date");
-db.AccountMovements.Add(new AccountMovement { Id=Guid.NewGuid(), CompanyId=company.Id, AccountId=usd.Id, GroupId=Guid.NewGuid(), Kind=AccountMovementKind.Transfer, OccurredAt=movementInstant, Amount=500m, Currency="USD", Note="Test transfer" });
+var openingGroup=Guid.NewGuid();
+var periodGroup=Guid.NewGuid();
+db.AccountMovements.AddRange(
+    new AccountMovement { Id=Guid.NewGuid(), CompanyId=company.Id, AccountId=usdReserve.Id, GroupId=openingGroup, Kind=AccountMovementKind.Transfer, OccurredAt=organaizer.Pages.Balance.IndexModel.MovementInstant(new DateTime(2026,8,20)), Amount=-100m, Currency="USD", Note="Opening transfer" },
+    new AccountMovement { Id=Guid.NewGuid(), CompanyId=company.Id, AccountId=usd.Id, GroupId=openingGroup, Kind=AccountMovementKind.Transfer, OccurredAt=organaizer.Pages.Balance.IndexModel.MovementInstant(new DateTime(2026,8,20)), Amount=100m, Currency="USD", Note="Opening transfer" },
+    new AccountMovement { Id=Guid.NewGuid(), CompanyId=company.Id, AccountId=usdReserve.Id, GroupId=periodGroup, Kind=AccountMovementKind.Transfer, OccurredAt=movementInstant, Amount=-500m, Currency="USD", Note="Test transfer" },
+    new AccountMovement { Id=Guid.NewGuid(), CompanyId=company.Id, AccountId=usd.Id, GroupId=periodGroup, Kind=AccountMovementKind.Transfer, OccurredAt=movementInstant, Amount=500m, Currency="USD", Note="Test transfer" });
 await db.SaveChangesAsync();
-var historyPage=new organaizer.Pages.Balance.HistoryModel(db,active) { AccountId=usd.Id };
+var historyPage=new organaizer.Pages.Balance.HistoryModel(db,active) { AccountId=usd.Id, From=new DateTime(2026,9,1), To=new DateTime(2026,9,30) };
+Check(await historyPage.OnGetAsync() is Microsoft.AspNetCore.Mvc.RazorPages.PageResult,"Filtered balance history loads");
+Check(historyPage.PeriodSummaries.Single().Opening==100m && historyPage.PeriodSummaries.Single().Income==500m && historyPage.PeriodSummaries.Single().Closing==600m,"Balance history calculates opening, incoming and closing balances for the period");
+Check(historyPage.Items.Count==1 && historyPage.Items[0].Description.Contains("USD Reserve"),"Internal transfer shows the source account in history");
 var historyExport=(FileContentResult)await historyPage.OnGetExportAsync();
 using(var historyPackage=new ExcelPackage(new MemoryStream(historyExport.FileContents)))
 {
     var sheet=historyPackage.Workbook.Worksheets[0];
-    Check(sheet.Cells[1,1].Text=="№ п/п" && sheet.Cells[1,2].Text=="Дата","Balance history export contains numbering and date");
-    Check(sheet.Cells[2,2].GetValue<DateTime>().Date==movementDate.Date,"Selected movement date is displayed in balance history export");
+    var detailHeaderRow=Enumerable.Range(1,sheet.Dimension.Rows).Single(row=>sheet.Cells[row,1].Text=="№ п/п");
+    Check(sheet.Cells[4,3].Text=="Сальдо на начало" && sheet.Cells[5,3].GetValue<decimal>()==100m,"Balance history export includes the period opening balance");
+    Check(sheet.Cells[detailHeaderRow,6].Text=="Приход" && sheet.Cells[detailHeaderRow,7].Text=="Расход" && sheet.Cells[detailHeaderRow,8].Text=="Валюта","Balance export separates income, expense and currency");
+    Check(sheet.Cells[detailHeaderRow+1,2].GetValue<DateTime>().Date==movementDate.Date,"Selected movement date is displayed in balance history export");
+    Check(sheet.Cells[detailHeaderRow+1,6].GetValue<decimal>()==500m && sheet.Cells[detailHeaderRow+1,8].Text=="USD","Balance movement remains numeric with a separate currency column");
 }
 
 sealed class TestSession : ISession

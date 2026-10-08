@@ -18,6 +18,7 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
     public List<SelectListItem> Currencies { get; private set; } = [];
     public Dictionary<Guid, decimal> Balances { get; private set; } = [];
     public List<ConversionBankOption> ConversionBanks { get; private set; } = [];
+    public List<MovementRow> RecentMovements { get; private set; } = [];
     public Domain.Company ActiveCompany { get; private set; } = null!;
     public string TodayAlmaty => DateTimeOffset.UtcNow.ToOffset(AlmatyOffset).ToString("yyyy-MM-dd");
 
@@ -46,6 +47,9 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
     }
 
     public sealed record ConversionBankOption(string Key, string Name);
+    public sealed record MovementRow(Guid GroupId, DateTimeOffset OccurredAt, string Kind,
+        string FromAccount, decimal FromAmount, string FromCurrency,
+        string ToAccount, decimal ToAmount, string ToCurrency, string? Note);
 
     public async Task OnGetAsync() => await LoadAsync();
 
@@ -96,7 +100,7 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
         var available = await BalanceCalculator.GetAsync(db, from.Id);
         if (available < amount) return Insufficient(from.Name, available, amount, from.Currency);
         await AddMovementPair(from, to, amount, amount, AccountMovementKind.Transfer, MovementInstant(occurredAt), note);
-        TempData["Success"] = "Перевод выполнен"; return RedirectToPage();
+        TempData["Success"] = "Перевод сохранён. Движение отображается ниже и в истории счетов."; return RedirectToPage();
     }
 
     public async Task<IActionResult> OnPostConvertAsync(string bankKey, Guid fromAccountId, Guid toAccountId, decimal fromAmount, decimal toAmount, DateTime occurredAt, string? note)
@@ -145,6 +149,29 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
                 (string.IsNullOrWhiteSpace(Currency) || x.Currency.Equals(Currency, StringComparison.OrdinalIgnoreCase)))
             .ToList();
         foreach (var item in AllItems) Balances[item.Id] = await BalanceCalculator.GetAsync(db, item.Id);
+        var recentRows = await db.AccountMovements.AsNoTracking()
+            .Include(x => x.Account).ThenInclude(x => x!.FinancialInstitution)
+            .Where(x => x.CompanyId == active.RequiredId)
+            .OrderByDescending(x => x.OccurredAt).ThenByDescending(x => x.Id)
+            .Take(100)
+            .ToListAsync();
+        RecentMovements = recentRows.GroupBy(x => x.GroupId)
+            .Select(group =>
+            {
+                var outgoing = group.FirstOrDefault(x => x.Amount < 0);
+                var incoming = group.FirstOrDefault(x => x.Amount > 0);
+                if (outgoing?.Account is null || incoming?.Account is null) return null;
+                return new MovementRow(group.Key, group.Max(x => x.OccurredAt),
+                    outgoing.Kind == AccountMovementKind.Transfer ? "Перевод" : "Конвертация",
+                    AccountLabel(outgoing.Account), Math.Abs(outgoing.Amount), outgoing.Currency,
+                    AccountLabel(incoming.Account), incoming.Amount, incoming.Currency,
+                    group.Select(x => x.Note).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)));
+            })
+            .Where(x => x is not null)
+            .Select(x => x!)
+            .OrderByDescending(x => x.OccurredAt)
+            .Take(30)
+            .ToList();
         ConversionBanks = AllItems
             .Where(x => x.FinancialInstitution?.Kind == InstitutionKind.Bank)
             .GroupBy(ConversionBankKey, StringComparer.OrdinalIgnoreCase)
@@ -176,6 +203,17 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
         }
         return name;
     }
+
+    public static string AccountLabel(MoneyAccount account)
+    {
+        var institution = account.FinancialInstitution?.Name?.Trim();
+        var accountName = account.Name.Trim();
+        return !string.IsNullOrWhiteSpace(institution) && !institution.Equals(accountName, StringComparison.OrdinalIgnoreCase)
+            ? $"{institution} · {accountName}"
+            : accountName;
+    }
+
+    public static string LocalDate(DateTimeOffset value) => value.ToOffset(AlmatyOffset).ToString("dd.MM.yyyy HH:mm");
 
     private static AccountKind ToAccountKind(InstitutionKind kind) => kind switch
     {

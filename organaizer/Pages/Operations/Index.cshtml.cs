@@ -55,7 +55,11 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
 
         using var package = new ExcelPackage();
         var sheet = package.Workbook.Worksheets.Add("Операции");
-        var headers = new[] { "№ п/п", "Дата", "Тип / клиент", "Отдаем", "Откуда отправляем", "Получаем", "Куда получаем", "Курс (деньги / товар)", "Прибыль" };
+        var headers = new[]
+        {
+            "№ п/п", "Дата", "Тип / клиент", "Отдаём", "Валюта отдаём", "Откуда отправляем",
+            "Получаем", "Валюта получаем", "Куда получаем", "Курс (деньги / товар)", "Прибыль", "Валюта прибыли"
+        };
         for (var column = 1; column <= headers.Length; column++) sheet.Cells[1, column].Value = headers[column - 1];
 
         for (var index = 0; index < items.Count; index++)
@@ -67,13 +71,16 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
             sheet.Cells[row, 2].Style.Numberformat.Format = "dd.mm.yyyy";
             sheet.Cells[row, 3].Value = $"{OperationTypes.All.GetValueOrDefault(operation.TypeCode, operation.TypeCode)}\n{operation.Counterparty?.Name ?? "Без клиента"}";
             sheet.Cells[row, 3].Style.WrapText = true;
-            SetMoneyCell(sheet.Cells[row, 4], operation.SellAmount, operation.SellCurrency);
-            sheet.Cells[row, 5].Value = operation.SourceAccount ?? "—";
-            SetMoneyCell(sheet.Cells[row, 6], operation.BuyAmount, operation.BuyCurrency);
-            sheet.Cells[row, 7].Value = operation.DestinationAccount ?? "—";
+            SetNumberCell(sheet.Cells[row, 4], operation.SellAmount);
+            sheet.Cells[row, 5].Value = operation.SellCurrency;
+            sheet.Cells[row, 6].Value = operation.SourceAccount ?? "—";
+            SetNumberCell(sheet.Cells[row, 7], operation.BuyAmount);
+            sheet.Cells[row, 8].Value = operation.BuyCurrency;
+            sheet.Cells[row, 9].Value = operation.DestinationAccount ?? "—";
             var rate = OperationTypes.CanonicalRate(operation.TypeCode, operation.SellCurrency, operation.SellAmount, operation.BuyCurrency, operation.BuyAmount);
-            sheet.Cells[row, 8].Value = rate.HasValue ? $"{rate.Value:N8} {OperationTypes.RateLabel(operation.TypeCode)}" : "—";
-            SetMoneyCell(sheet.Cells[row, 9], operation.BaseCurrencyProfit, "USD");
+            sheet.Cells[row, 10].Value = rate.HasValue ? $"{rate.Value:N8} {OperationTypes.RateLabel(operation.TypeCode)}" : "—";
+            SetNumberCell(sheet.Cells[row, 11], operation.BaseCurrencyProfit);
+            sheet.Cells[row, 12].Value = "USD";
         }
 
         using (var header = sheet.Cells[1, 1, 1, headers.Length])
@@ -90,14 +97,19 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
         sheet.Column(1).Width = 9;
         sheet.Column(2).Width = 14;
         sheet.Column(3).Width = 42;
-        sheet.Column(4).Width = 22;
-        sheet.Column(5).Width = 24;
-        sheet.Column(6).Width = 22;
-        sheet.Column(7).Width = 24;
-        sheet.Column(8).Width = 28;
-        sheet.Column(9).Width = 20;
+        sheet.Column(4).Width = 20;
+        sheet.Column(5).Width = 16;
+        sheet.Column(6).Width = 24;
+        sheet.Column(7).Width = 20;
+        sheet.Column(8).Width = 18;
+        sheet.Column(9).Width = 24;
+        sheet.Column(10).Width = 28;
+        sheet.Column(11).Width = 20;
+        sheet.Column(12).Width = 18;
         sheet.Cells[2, 1, Math.Max(items.Count + 1, 2), 2].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-        sheet.Cells[2, 4, Math.Max(items.Count + 1, 2), 9].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
+        sheet.Cells[2, 4, Math.Max(items.Count + 1, 2), 4].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
+        sheet.Cells[2, 7, Math.Max(items.Count + 1, 2), 7].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
+        sheet.Cells[2, 11, Math.Max(items.Count + 1, 2), 11].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
         sheet.Cells[1, 1, Math.Max(items.Count + 1, 1), headers.Length].Style.VerticalAlignment = ExcelVerticalAlignment.Center;
 
         var fileName = $"operations_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
@@ -172,10 +184,9 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
             ? query.OrderBy(x => x.OccurredAt).ThenBy(x => x.CreatedAt ?? x.OccurredAt).ThenBy(x => x.Id)
             : query.OrderByDescending(x => x.OccurredAt).ThenByDescending(x => x.CreatedAt ?? x.OccurredAt).ThenByDescending(x => x.Id);
 
-    private static void SetMoneyCell(ExcelRange cell, decimal amount, string currency)
+    private static void SetNumberCell(ExcelRange cell, decimal amount)
     {
         cell.Value = amount;
-        var safeCurrency = currency.Replace("\"", "\"\"");
-        cell.Style.Numberformat.Format = $"#,##0.00 \"{safeCurrency}\"";
+        cell.Style.Numberformat.Format = "#,##0.00########;[Red]-#,##0.00########;-";
     }
 }

@@ -18,10 +18,21 @@
   </div>
 </form>
 
+@if(Model.ShowPeriodSummary)
+{
+<div class="card mb-4">
+  <div class="card-header"><div class="card-title">Сальдо за выбранный период</div></div>
+  <div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>Счёт</th><th>Валюта</th><th class="text-end">Сальдо на начало</th><th class="text-end">Приход</th><th class="text-end">Расход</th><th class="text-end">Сальдо на конец</th></tr></thead><tbody>
+  @foreach(var x in Model.PeriodSummaries){<tr><td><strong>@x.Account</strong></td><td><span class="badge bg-indigo-lt">@x.Currency</span></td><td class="text-end">@x.Opening.ToString("N2")</td><td class="text-end text-success">@x.Income.ToString("N2")</td><td class="text-end text-danger">@x.Expense.ToString("N2")</td><td class="text-end fw-bold @(x.Closing<0?"text-danger":"")">@x.Closing.ToString("N2")</td></tr>}
+  @if(Model.PeriodSummaries.Count==0){<tr><td colspan="6" class="empty-state">По заданным фильтрам счетов не найдено</td></tr>}
+  </tbody></table></div>
+</div>
+}
+
 <div class="card">
   <div class="card-header"><div class="card-title">Найдено движений: @Model.Items.Count</div></div>
-  <div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>Дата</th><th>Счёт</th><th>Тип операции</th><th>Описание</th><th>Валюта</th><th class="text-end">Движение</th><th class="text-end">Остаток</th></tr></thead><tbody>
-  @foreach(var x in Model.Items){<tr><td class="text-nowrap">@organaizer.Pages.Balance.HistoryModel.LocalDate(x.OccurredAt)</td><td><strong>@x.Account</strong></td><td><span class="badge bg-azure-lt">@x.Type</span></td><td>@(string.IsNullOrWhiteSpace(x.Description) ? "—" : x.Description)</td><td><span class="badge bg-indigo-lt">@x.Currency</span></td><td class="text-end fw-semibold @(x.Amount<0?"text-danger":"text-success")">@(x.Amount>0?"+":"")@x.Amount.ToString("N2") @x.Currency</td><td class="text-end fw-bold @(x.Balance<0?"text-danger":"")">@x.Balance.ToString("N2") @x.Currency</td></tr>}
-  @if(Model.Items.Count==0){<tr><td colspan="7" class="empty-state">По заданным фильтрам движений не найдено</td></tr>}
+  <div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>Дата</th><th>Счёт</th><th>Тип операции</th><th>Описание</th><th class="text-end">Приход</th><th class="text-end">Расход</th><th>Валюта</th><th class="text-end">Остаток</th></tr></thead><tbody>
+  @foreach(var x in Model.Items){<tr><td class="text-nowrap">@organaizer.Pages.Balance.HistoryModel.LocalDate(x.OccurredAt)</td><td><strong>@x.Account</strong></td><td><span class="badge bg-azure-lt">@x.Type</span></td><td>@(string.IsNullOrWhiteSpace(x.Description) ? "—" : x.Description)</td><td class="text-end fw-semibold text-success">@(x.Amount>0?x.Amount.ToString("N2"):"—")</td><td class="text-end fw-semibold text-danger">@(x.Amount<0?Math.Abs(x.Amount).ToString("N2"):"—")</td><td><span class="badge bg-indigo-lt">@x.Currency</span></td><td class="text-end fw-bold @(x.Balance<0?"text-danger":"")">@x.Balance.ToString("N2")</td></tr>}
+  @if(Model.Items.Count==0){<tr><td colspan="8" class="empty-state">По заданным фильтрам движений не найдено</td></tr>}
   </tbody></table></div>
 </div>
