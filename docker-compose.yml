@@ -19,6 +19,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__Finance: Host=db;Port=5432;Database=finance;Username=finance;Password=${POSTGRES_PASSWORD:-finance_dev}
       HistoricalImportPath: /app/import/historical-data.json
+      LiquidityMonthImportPath: ${LIQUIDITY_MONTH_IMPORT_PATH:-/app/import/august-2026.json}
     volumes:
       - ./imports:/app/import:ro
     depends_on:

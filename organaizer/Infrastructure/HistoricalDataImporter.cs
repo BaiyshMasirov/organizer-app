@@ -14,8 +14,13 @@ public static class HistoricalDataImporter
         if(payload is null)return;
         var companies=await db.Companies.ToDictionaryAsync(x=>x.Kind);
         var clientCache=(await db.Counterparties.ToListAsync()).GroupBy(x=>x.CompanyId).ToDictionary(g=>g.Key,g=>g.ToDictionary(x=>x.Name.Trim().ToLower(),StringComparer.OrdinalIgnoreCase));
-        var rawKeys=(await db.HistoricalImportRecords.Select(x=>x.SourceKey).ToListAsync()).ToHashSet();
-        foreach(var r in payload.Records.Where(x=>rawKeys.Add(x.SourceKey))) db.HistoricalImportRecords.Add(new HistoricalImportRecord{Id=Guid.NewGuid(),SourceKey=r.SourceKey,SourceFile=r.SourceFile,SourceSheet=r.SourceSheet,SourceRow=r.SourceRow,RecordType=r.RecordType,DataJson=r.DataJson});
+        var rawRecords=await db.HistoricalImportRecords.ToDictionaryAsync(x=>x.SourceKey);
+        foreach(var r in payload.Records)
+        {
+            if(rawRecords.TryGetValue(r.SourceKey,out var existingRaw))
+            { existingRaw.SourceFile=r.SourceFile;existingRaw.SourceSheet=r.SourceSheet;existingRaw.SourceRow=r.SourceRow;existingRaw.RecordType=r.RecordType;existingRaw.DataJson=r.DataJson; }
+            else { var record=new HistoricalImportRecord{Id=Guid.NewGuid(),SourceKey=r.SourceKey,SourceFile=r.SourceFile,SourceSheet=r.SourceSheet,SourceRow=r.SourceRow,RecordType=r.RecordType,DataJson=r.DataJson};rawRecords.Add(r.SourceKey,record);db.HistoricalImportRecords.Add(record); }
+        }
         await db.SaveChangesAsync();
         var operationKeys=(await db.Operations.Where(x=>x.ImportKey!=null).Select(x=>x.ImportKey!).ToListAsync()).ToHashSet();
         foreach(var item in payload.Operations.Where(x=>operationKeys.Add(x.SourceKey)))
@@ -42,8 +47,9 @@ public static class HistoricalDataImporter
             if(rateKeys.Add(rate.ImportKey!))db.ExchangeRates.Add(rate);
         }
         await db.SaveChangesAsync();
-        var resultKeys=(await db.MonthlyCurrencyResults.Select(x=>x.ImportKey).ToListAsync()).ToHashSet();
-        foreach(var result in ExtractMonthlyResults(payload.Records).Where(x=>resultKeys.Add(x.ImportKey)))db.MonthlyCurrencyResults.Add(result);
+        var results=await db.MonthlyCurrencyResults.ToDictionaryAsync(x=>x.ImportKey);
+        foreach(var result in ExtractMonthlyResults(payload.Records))
+            Upsert(db,results,result.ImportKey,result);
         await db.SaveChangesAsync();
         await ImportMonthlyTables(db,payload.Records);
         var importedExpenses=await db.Expenses.Where(x=>x.ImportKey!=null).ToDictionaryAsync(x=>x.ImportKey!);var expenseKeys=importedExpenses.Keys.ToHashSet();
@@ -167,15 +173,15 @@ public static class HistoricalDataImporter
 
     private static async Task ImportMonthlyTables(FinanceDbContext db,IEnumerable<RawRecord> records)
     {
-        var purchaseKeys=(await db.MonthlyPurchaseTotals.Select(x=>x.ImportKey).ToListAsync()).ToHashSet();var saleKeys=(await db.MonthlySaleTotals.Select(x=>x.ImportKey).ToListAsync()).ToHashSet();var expenseKeys=(await db.MonthlyExpenseTotals.Select(x=>x.ImportKey).ToListAsync()).ToHashSet();var balanceKeys=(await db.MonthlyBalanceSnapshots.Select(x=>x.ImportKey).ToListAsync()).ToHashSet();
+        var purchases=await db.MonthlyPurchaseTotals.ToDictionaryAsync(x=>x.ImportKey);var sales=await db.MonthlySaleTotals.ToDictionaryAsync(x=>x.ImportKey);var expenses=await db.MonthlyExpenseTotals.ToDictionaryAsync(x=>x.ImportKey);var balances=await db.MonthlyBalanceSnapshots.ToDictionaryAsync(x=>x.ImportKey);
         foreach(var sheet in records.Where(x=>x.SourceKey.StartsWith("liquidity|",StringComparison.OrdinalIgnoreCase)).GroupBy(x=>x.SourceSheet))
         {
             var rows=sheet.OrderBy(x=>x.SourceRow).Select(x=>(Record:x,Cells:JsonSerializer.Deserialize<CellBag>(x.DataJson)?.Cells??[])).ToList();var period=PeriodFromRows(rows);if(period is null)continue;var expenseHeader=rows.FirstOrDefault(x=>x.Cells.Count>9&&string.Equals(Text(x.Cells[8]),"расходы",StringComparison.OrdinalIgnoreCase)).Record?.SourceRow??-100;var balanceHeader=rows.FirstOrDefault(x=>x.Cells.Count>9&&Text(x.Cells[8]).Contains("сальдо на начало",StringComparison.OrdinalIgnoreCase)).Record?.SourceRow??-100;
             foreach(var row in rows)
             {
-                if(row.Cells.Count>4){var label=Text(row.Cells[1]);var isBuy=label.StartsWith("ИТОГО покупка ",StringComparison.OrdinalIgnoreCase);var isSale=label.StartsWith("ИТОГО продажа ",StringComparison.OrdinalIgnoreCase);if((isBuy||isSale)&&Number(row.Cells[3],out var received)&&Number(row.Cells[4],out var given)){var pair=label.Split(' ').Last();var parts=pair.Split('/');if(parts.Length==2){var receivedCurrency=isBuy?parts[0]:parts[1];var givenCurrency=isBuy?parts[1]:parts[0];var key=$"monthly-trade|{row.Record.SourceKey}";if(isBuy&&purchaseKeys.Add(key))db.MonthlyPurchaseTotals.Add(new(){Id=Guid.NewGuid(),Period=period.Value,Pair=pair,ReceivedAmount=received,ReceivedCurrency=receivedCurrency,GivenAmount=given,GivenCurrency=givenCurrency,ImportKey=key});if(isSale&&saleKeys.Add(key))db.MonthlySaleTotals.Add(new(){Id=Guid.NewGuid(),Period=period.Value,Pair=pair,ReceivedAmount=received,ReceivedCurrency=receivedCurrency,GivenAmount=given,GivenCurrency=givenCurrency,ImportKey=key});}}}
-                if(row.Record.SourceRow>expenseHeader&&row.Record.SourceRow<=expenseHeader+4&&row.Cells.Count>9&&row.Cells[7].ValueKind==JsonValueKind.String&&Number(row.Cells[8],out var expense)&&Number(row.Cells[9],out var expenseUsdt)){var currency=Text(row.Cells[7]).ToUpperInvariant();if(currency is "USD" or "USDT" or "RUB" or "AED"){var key=$"monthly-expense-total|{row.Record.SourceKey}";if(expenseKeys.Add(key))db.MonthlyExpenseTotals.Add(new(){Id=Guid.NewGuid(),Period=period.Value,Currency=currency,Amount=expense,EquivalentUsdt=expenseUsdt,ImportKey=key});}}
-                if(row.Record.SourceRow>balanceHeader&&row.Record.SourceRow<=balanceHeader+4&&row.Cells.Count>11&&row.Cells[7].ValueKind==JsonValueKind.String&&Number(row.Cells[8],out var opening)&&Number(row.Cells[9],out var closing)&&Number(row.Cells[10],out var openingUsdt)&&Number(row.Cells[11],out var closingUsdt)){var currency=Text(row.Cells[7]).ToUpperInvariant();if(currency is "USD" or "USDT" or "RUB" or "AED"){var key=$"monthly-balance|{row.Record.SourceKey}";if(balanceKeys.Add(key))db.MonthlyBalanceSnapshots.Add(new(){Id=Guid.NewGuid(),Period=period.Value,Currency=currency,OpeningAmount=opening,ClosingAmount=closing,OpeningEquivalentUsdt=openingUsdt,ClosingEquivalentUsdt=closingUsdt,ImportKey=key});}}
+                if(row.Cells.Count>4){var label=Text(row.Cells[1]);var isBuy=label.StartsWith("ИТОГО покупка ",StringComparison.OrdinalIgnoreCase);var isSale=label.StartsWith("ИТОГО продажа ",StringComparison.OrdinalIgnoreCase);if((isBuy||isSale)&&Number(row.Cells[3],out var received)&&Number(row.Cells[4],out var given)){var pair=label.Split(' ').Last();var parts=pair.Split('/');if(parts.Length==2){var receivedCurrency=isBuy?parts[0]:parts[1];var givenCurrency=isBuy?parts[1]:parts[0];var key=$"monthly-trade|{row.Record.SourceKey}";if(isBuy)Upsert(db,purchases,key,new MonthlyPurchaseTotal(){Id=Guid.NewGuid(),Period=period.Value,Pair=pair,ReceivedAmount=received,ReceivedCurrency=receivedCurrency,GivenAmount=given,GivenCurrency=givenCurrency,ImportKey=key});if(isSale)Upsert(db,sales,key,new MonthlySaleTotal(){Id=Guid.NewGuid(),Period=period.Value,Pair=pair,ReceivedAmount=received,ReceivedCurrency=receivedCurrency,GivenAmount=given,GivenCurrency=givenCurrency,ImportKey=key});}}}
+                if(row.Record.SourceRow>expenseHeader&&row.Record.SourceRow<=expenseHeader+4&&row.Cells.Count>9&&row.Cells[7].ValueKind==JsonValueKind.String&&Number(row.Cells[8],out var expense)&&Number(row.Cells[9],out var expenseUsdt)){var currency=Text(row.Cells[7]).ToUpperInvariant();if(currency is "USD" or "USDT" or "RUB" or "AED"){var key=$"monthly-expense-total|{row.Record.SourceKey}";Upsert(db,expenses,key,new MonthlyExpenseTotal(){Id=Guid.NewGuid(),Period=period.Value,Currency=currency,Amount=expense,EquivalentUsdt=expenseUsdt,ImportKey=key});}}
+                if(row.Record.SourceRow>balanceHeader&&row.Record.SourceRow<=balanceHeader+4&&row.Cells.Count>11&&row.Cells[7].ValueKind==JsonValueKind.String&&Number(row.Cells[8],out var opening)&&Number(row.Cells[9],out var closing)&&Number(row.Cells[10],out var openingUsdt)&&Number(row.Cells[11],out var closingUsdt)){var currency=Text(row.Cells[7]).ToUpperInvariant();if(currency is "USD" or "USDT" or "RUB" or "AED"){var key=$"monthly-balance|{row.Record.SourceKey}";Upsert(db,balances,key,new MonthlyBalanceSnapshot(){Id=Guid.NewGuid(),Period=period.Value,Currency=currency,OpeningAmount=opening,ClosingAmount=closing,OpeningEquivalentUsdt=openingUsdt,ClosingEquivalentUsdt=closingUsdt,ImportKey=key});}}
             }
         }
         await db.SaveChangesAsync();
@@ -187,6 +193,17 @@ public static class HistoricalDataImporter
     }
 
     private static string Text(JsonElement value)=>value.ValueKind==JsonValueKind.String?(value.GetString()??"").Trim():value.ToString().Trim();
+    private static void Upsert<T>(FinanceDbContext db, Dictionary<string,T> existing, string key, T incoming) where T : class
+    {
+        if(existing.TryGetValue(key,out var current))
+        {
+            var entry=db.Entry(current);
+            var id=entry.Property("Id").CurrentValue;
+            typeof(T).GetProperty("Id")!.SetValue(incoming,id);
+            entry.CurrentValues.SetValues(incoming);
+        }
+        else { db.Set<T>().Add(incoming);existing.Add(key,incoming); }
+    }
     private static bool Number(JsonElement value,out decimal result)=>value.ValueKind==JsonValueKind.Number?value.TryGetDecimal(out result):decimal.TryParse(Text(value),System.Globalization.NumberStyles.Any,System.Globalization.CultureInfo.InvariantCulture,out result);
     private sealed record CellBag([property:System.Text.Json.Serialization.JsonPropertyName("cells")]List<JsonElement> Cells);
 

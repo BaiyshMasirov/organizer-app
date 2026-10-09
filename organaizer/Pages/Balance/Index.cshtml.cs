@@ -99,7 +99,8 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
         if (occurredAt == default) return BalanceError("Укажите дату перевода.");
         var available = await BalanceCalculator.GetAsync(db, from.Id);
         if (available < amount) return Insufficient(from.Name, available, amount, from.Currency);
-        await AddMovementPair(from, to, amount, amount, AccountMovementKind.Transfer, MovementInstant(occurredAt), note);
+        try { await new TransferService(db).CreateAsync(active.RequiredId, from.Id, to.Id, amount, occurredAt, note, User.Identity?.Name ?? "system"); }
+        catch (ArgumentException ex) { return BalanceError(ex.Message); }
         TempData["Success"] = "Перевод сохранён. Движение отображается ниже и в истории счетов."; return RedirectToPage();
     }
 
@@ -134,7 +135,7 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
     private IActionResult BalanceError(string message) { TempData["BalanceError"] = message; return RedirectToPage(); }
 
     public static DateTimeOffset MovementInstant(DateTime date) =>
-        new(DateTime.SpecifyKind(date.Date, DateTimeKind.Unspecified), AlmatyOffset);
+        new DateTimeOffset(DateTime.SpecifyKind(date.Date, DateTimeKind.Unspecified), AlmatyOffset).ToUniversalTime();
 
     private async Task LoadAsync()
     {
@@ -151,7 +152,7 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
         foreach (var item in AllItems) Balances[item.Id] = await BalanceCalculator.GetAsync(db, item.Id);
         var recentRows = await db.AccountMovements.AsNoTracking()
             .Include(x => x.Account).ThenInclude(x => x!.FinancialInstitution)
-            .Where(x => x.CompanyId == active.RequiredId)
+            .Where(x => x.CompanyId == active.RequiredId && !x.IsCancelled)
             .OrderByDescending(x => x.OccurredAt).ThenByDescending(x => x.Id)
             .Take(100)
             .ToListAsync();

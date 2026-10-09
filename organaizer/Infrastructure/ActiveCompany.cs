@@ -19,7 +19,7 @@ public static class BalanceCalculator
         var account = await db.Accounts.AsNoTracking().SingleAsync(x => x.Id == accountId, ct);
         var settlements = await db.Settlements.AsNoTracking().Where(x => x.AccountId == accountId && x.Operation!.Status != OperationStatus.Cancelled).SumAsync(x => x.Amount, ct);
         var expenses = await db.Expenses.AsNoTracking().Where(x => x.AccountId == accountId).SumAsync(x => x.Amount, ct);
-        var movements = await db.AccountMovements.AsNoTracking().Where(x => x.AccountId == accountId).SumAsync(x => x.Amount, ct);
+        var movements = await db.AccountMovements.AsNoTracking().Where(x => x.AccountId == accountId && !x.IsCancelled).SumAsync(x => x.Amount, ct);
         return account.OpeningBalance + settlements - expenses + movements;
     }
 }

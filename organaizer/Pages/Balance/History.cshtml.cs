@@ -139,7 +139,7 @@ public sealed class HistoryModel(FinanceDbContext db, ActiveCompany active) : Pa
             }).ToListAsync();
         var expenses = await db.Expenses.AsNoTracking().Where(x => accountIds.Contains(x.AccountId))
             .Select(x => new { x.AccountId, x.OccurredAt, x.Amount, x.Category, x.Note }).ToListAsync();
-        var movements = await db.AccountMovements.AsNoTracking().Where(x => accountIds.Contains(x.AccountId))
+        var movements = await db.AccountMovements.AsNoTracking().Where(x => accountIds.Contains(x.AccountId) && !x.IsCancelled)
             .Select(x => new { x.AccountId, x.GroupId, x.OccurredAt, x.Amount, x.Currency, x.Kind, x.Note }).ToListAsync();
 
         RawEntry Create(Guid id, DateTimeOffset at, string type, string description, decimal amount)

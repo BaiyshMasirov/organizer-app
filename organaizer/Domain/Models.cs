@@ -111,11 +111,13 @@ public sealed class AccountMovement
     public Guid AccountId { get; set; }
     public MoneyAccount? Account { get; set; }
     public Guid GroupId { get; set; }
+    public bool IsCancelled { get; set; }
+    [ConcurrencyCheck] public int Revision { get; set; }
     public AccountMovementKind Kind { get; set; }
     public DateTimeOffset OccurredAt { get; set; } = DateTimeOffset.UtcNow;
     public decimal Amount { get; set; }
     [MaxLength(5)] public required string Currency { get; set; }
-    [MaxLength(300)] public string? Note { get; set; }
+    [MaxLength(500)] public string? Note { get; set; }
 }
 
 public sealed class Expense
@@ -275,6 +277,24 @@ public static class OperationTypes
             : buyCurrency.Equals(market.Quote, StringComparison.OrdinalIgnoreCase) ? buyAmount : 0;
         return baseAmount > 0 && quoteAmount > 0 ? quoteAmount / baseAmount : null;
     }
+}
+
+public sealed class TransferRevision
+{
+    public Guid Id { get; set; }
+    public Guid CompanyId { get; set; }
+    public Guid TransferId { get; set; }
+    public int Revision { get; set; }
+    [MaxLength(40)] public required string Action { get; set; }
+    [MaxLength(180)] public required string Actor { get; set; }
+    public DateTimeOffset ChangedAt { get; set; }
+    public DateTimeOffset OccurredAt { get; set; }
+    [MaxLength(330)] public required string FromAccount { get; set; }
+    [MaxLength(330)] public required string ToAccount { get; set; }
+    [MaxLength(5)] public required string Currency { get; set; }
+    public decimal Amount { get; set; }
+    [MaxLength(500)] public string? Note { get; set; }
+    public bool IsCancelled { get; set; }
 }
 
 public static class OperationStatuses

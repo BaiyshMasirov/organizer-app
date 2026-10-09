@@ -24,6 +24,7 @@ public sealed class FinanceDbContext(DbContextOptions<FinanceDbContext> options,
     public DbSet<HistoricalImportRecord> HistoricalImportRecords => Set<HistoricalImportRecord>();
     public DbSet<FinancialInstitution> FinancialInstitutions => Set<FinancialInstitution>();
     public DbSet<AccountMovement> AccountMovements => Set<AccountMovement>();
+    public DbSet<TransferRevision> TransferRevisions => Set<TransferRevision>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -40,6 +41,8 @@ public sealed class FinanceDbContext(DbContextOptions<FinanceDbContext> options,
         b.Entity<TradeOperation>().HasQueryFilter(x => ActiveCompanyId == null || x.CompanyId == ActiveCompanyId);
         b.Entity<Expense>().HasQueryFilter(x => ActiveCompanyId == null || x.CompanyId == ActiveCompanyId);
         b.Entity<AccountMovement>().HasQueryFilter(x => ActiveCompanyId == null || x.CompanyId == ActiveCompanyId);
+        b.Entity<TransferRevision>().HasQueryFilter(x => ActiveCompanyId == null || x.CompanyId == ActiveCompanyId);
+        b.Entity<TransferRevision>().HasIndex(x => new { x.TransferId, x.Revision }).IsUnique();
         b.Entity<MoneyAccount>().HasIndex(x => new { x.CompanyId, x.FinancialInstitutionId, x.Currency });
         b.Entity<MoneyAccount>().HasIndex(x => new { x.CompanyId, x.Name, x.Currency });
         b.Entity<AccountMovement>().HasIndex(x => new { x.AccountId, x.OccurredAt });

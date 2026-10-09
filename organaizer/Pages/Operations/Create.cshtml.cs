@@ -49,6 +49,7 @@ public sealed class CreateModel(Dispatcher dispatcher, FinanceDbContext db, Acti
         var source = await db.Operations.AsNoTracking().Include(x => x.Settlements)
             .SingleOrDefaultAsync(x => x.Id == copyFrom && x.CompanyId == active.RequiredId);
         if (source is null) return NotFound();
+        if(source.TypeCode==TransferService.TypeCode) return RedirectToPage("/Operations/Transfers/Create");
         var sellSettlement = source.Settlements.Where(x => x.Amount < 0).OrderBy(x => x.OccurredAt).FirstOrDefault();
         var buySettlement = source.Settlements.Where(x => x.Amount > 0).OrderBy(x => x.OccurredAt).FirstOrDefault();
         Input = new InputModel

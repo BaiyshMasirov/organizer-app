@@ -119,7 +119,7 @@ Check(await AaExchangeRateService.MarketRateAsync(db,"BUY_AED_RUB",date)==20m,"A
 
 var movementDate=new DateTime(2026,9,15);
 var movementInstant=organaizer.Pages.Balance.IndexModel.MovementInstant(movementDate);
-Check(movementInstant.Date==movementDate.Date && movementInstant.Offset==TimeSpan.FromHours(5),"Transfer and conversion dates use Almaty local date");
+Check(movementInstant.Offset==TimeSpan.Zero && movementInstant.ToOffset(TimeSpan.FromHours(5)).Date==movementDate.Date && movementInstant.UtcDateTime==DateTime.SpecifyKind(movementDate.Date.AddHours(-5),DateTimeKind.Utc),"Transfer and conversion dates preserve Almaty date and are stored in UTC for PostgreSQL");
 var openingGroup=Guid.NewGuid();
 var periodGroup=Guid.NewGuid();
 db.AccountMovements.AddRange(

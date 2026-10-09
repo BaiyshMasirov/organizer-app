@@ -54,7 +54,16 @@ using (var scope = app.Services.CreateScope())
     var db=scope.ServiceProvider.GetRequiredService<FinanceDbContext>();
     await SeedData.InitializeAsync(db, scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>(), scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>());
     await HistoricalDataImporter.ImportAsync(db,builder.Configuration["HistoricalImportPath"]);
+    if (builder.Configuration["LiquidityMonthImportPath"] is { Length: > 0 } monthImportPath && File.Exists(monthImportPath))
+        await LiquidityMonthImporter.ImportAsync(db, monthImportPath);
     await AccountDirectoryNormalizer.NormalizeAsync(db);
+}
+
+// Maintenance containers can apply migrations/imports without starting the web server.
+if (builder.Configuration.GetValue<bool>("ImportOnly"))
+{
+    await app.DisposeAsync();
+    return;
 }
 
 // Configure the HTTP request pipeline.

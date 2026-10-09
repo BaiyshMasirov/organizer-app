@@ -1,0 +1,17 @@
+@page
+@model organaizer.Pages.Operations.Transfers.CreateModel
+@using organaizer.Infrastructure
+@{ ViewData["Title"]=TransferService.Title; }
+<div class="d-flex justify-content-between mb-4"><h1>Новый перевод между своими счетами</h1><a asp-page="/Operations/Index" class="btn btn-light">К операциям</a></div>
+<form method="post" class="card card-body">
+  <div asp-validation-summary="All" class="alert alert-danger"></div>
+  <div class="row g-3">
+    <div class="col-md-6"><label asp-for="Input.FromAccountId" class="form-label">Со счёта</label><select asp-for="Input.FromAccountId" class="form-select" required><option value="">Выберите счёт</option>@foreach(var a in Model.Accounts){<option value="@a.Id">@TransferService.Label(a) · @a.Currency</option>}</select></div>
+    <div class="col-md-6"><label asp-for="Input.ToAccountId" class="form-label">На счёт</label><select asp-for="Input.ToAccountId" class="form-select" required><option value="">Выберите счёт</option>@foreach(var a in Model.Accounts){<option value="@a.Id">@TransferService.Label(a) · @a.Currency</option>}</select></div>
+    <div class="col-md-6"><label asp-for="Input.Amount" class="form-label">Сумма</label><input asp-for="Input.Amount" type="number" step="0.00000001" min="0.00000001" class="form-control" required /></div>
+    <div class="col-md-6"><label asp-for="Input.OccurredAt" class="form-label">Дата</label><input asp-for="Input.OccurredAt" type="date" class="form-control" required /></div>
+    <div class="col-12"><label asp-for="Input.Note" class="form-label">Комментарий</label><textarea asp-for="Input.Note" class="form-control" maxlength="500"></textarea></div>
+  </div>
+  <div class="form-hint mt-3">Выберите разные счета в одной валюте. Перевод не влияет на прибыль компании.</div>
+  <div class="mt-4"><button class="btn btn-primary">Сохранить перевод</button></div>
+</form>

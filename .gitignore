@@ -7,4 +7,5 @@
 .env.*
 finance-flow-update.tar.gz
 imports/historical-data.json
+imports/august-2026.json
 .import-tools/node_modules/

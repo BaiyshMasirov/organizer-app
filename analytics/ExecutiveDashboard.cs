@@ -31,7 +31,7 @@ public static class ExecutiveDashboard
         string N(decimal value) => value.ToString("N2", ru);
 
         var companies = await db.Companies.IgnoreQueryFilters().AsNoTracking().OrderBy(x => x.Kind).ToListAsync();
-        var operations = await db.Operations.IgnoreQueryFilters().AsNoTracking().Where(x => x.Status != OperationStatus.Cancelled && x.OccurredAt >= start && x.OccurredAt < end).ToListAsync();
+        var operations = await db.Operations.IgnoreQueryFilters().AsNoTracking().Where(x => x.TypeCode != TransferService.TypeCode && x.Status != OperationStatus.Cancelled && x.OccurredAt >= start && x.OccurredAt < end).ToListAsync();
         var expenses = await db.Expenses.IgnoreQueryFilters().AsNoTracking().Where(x => x.OccurredAt >= start && x.OccurredAt < end).ToListAsync();
         var results = companies.Select(company =>
         {
@@ -53,7 +53,7 @@ public static class ExecutiveDashboard
         var ids = accounts.Select(x => x.Id).ToList();
         var settlements = await db.Settlements.IgnoreQueryFilters().AsNoTracking().Where(x => ids.Contains(x.AccountId) && x.Operation!.Status != OperationStatus.Cancelled).GroupBy(x => x.AccountId).Select(g => new { Id = g.Key, Amount = g.Sum(x => x.Amount) }).ToDictionaryAsync(x => x.Id, x => x.Amount);
         var accountExpenses = await db.Expenses.IgnoreQueryFilters().AsNoTracking().Where(x => ids.Contains(x.AccountId)).GroupBy(x => x.AccountId).Select(g => new { Id = g.Key, Amount = g.Sum(x => x.Amount) }).ToDictionaryAsync(x => x.Id, x => x.Amount);
-        var movements = await db.AccountMovements.IgnoreQueryFilters().AsNoTracking().Where(x => ids.Contains(x.AccountId)).GroupBy(x => x.AccountId).Select(g => new { Id = g.Key, Amount = g.Sum(x => x.Amount) }).ToDictionaryAsync(x => x.Id, x => x.Amount);
+        var movements = await db.AccountMovements.IgnoreQueryFilters().AsNoTracking().Where(x => ids.Contains(x.AccountId) && !x.IsCancelled).GroupBy(x => x.AccountId).Select(g => new { Id = g.Key, Amount = g.Sum(x => x.Amount) }).ToDictionaryAsync(x => x.Id, x => x.Amount);
         var balances = accounts.Select(x => new AccountBalance(x.Company?.Name ?? "—", x.FinancialInstitution?.Name ?? x.Name, x.FinancialInstitution?.Kind == InstitutionKind.Bank ? "Банк" : "Кошелёк", x.Currency, x.OpeningBalance + settlements.GetValueOrDefault(x.Id) - accountExpenses.GetValueOrDefault(x.Id) + movements.GetValueOrDefault(x.Id))).OrderBy(x => x.Company).ThenBy(x => x.Account).ThenBy(x => x.Currency).ToList();
 
         var companyRows = new StringBuilder();

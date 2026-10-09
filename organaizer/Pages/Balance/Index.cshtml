@@ -36,7 +36,7 @@
 <div class="card mt-4">
   <div class="card-header"><div><div class="card-title">Последние переводы и конвертации</div><div class="text-secondary small">Сохранённые движения собственных средств</div></div></div>
   <div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>Дата</th><th>Тип</th><th>Откуда</th><th class="text-end">Расход</th><th>Куда</th><th class="text-end">Приход</th><th>Комментарий</th></tr></thead><tbody>
-  @foreach(var x in Model.RecentMovements){<tr><td class="text-nowrap">@organaizer.Pages.Balance.IndexModel.LocalDate(x.OccurredAt)</td><td><span class="badge bg-azure-lt">@x.Kind</span></td><td><strong>@x.FromAccount</strong></td><td class="text-end text-danger fw-semibold">@x.FromAmount.ToString("N2") @x.FromCurrency</td><td><strong>@x.ToAccount</strong></td><td class="text-end text-success fw-semibold">@x.ToAmount.ToString("N2") @x.ToCurrency</td><td>@(string.IsNullOrWhiteSpace(x.Note)?"—":x.Note)</td></tr>}
+  @foreach(var x in Model.RecentMovements){<tr><td class="text-nowrap">@organaizer.Pages.Balance.IndexModel.LocalDate(x.OccurredAt)</td><td>@if(x.Kind=="Перевод"){<a asp-page="/Operations/Transfers/Details" asp-route-id="@x.GroupId">Открыть перевод</a>}else{<span class="badge bg-azure-lt">@x.Kind</span>}</td><td><strong>@x.FromAccount</strong></td><td class="text-end text-danger fw-semibold">@x.FromAmount.ToString("N2") @x.FromCurrency</td><td><strong>@x.ToAccount</strong></td><td class="text-end text-success fw-semibold">@x.ToAmount.ToString("N2") @x.ToCurrency</td><td>@(string.IsNullOrWhiteSpace(x.Note)?"—":x.Note)</td></tr>}
   @if(Model.RecentMovements.Count==0){<tr><td colspan="7" class="empty-state">Переводов и конвертаций пока нет</td></tr>}
   </tbody></table></div>
 </div>

@@ -44,6 +44,7 @@ public sealed class EditModel(Dispatcher dispatcher, FinanceDbContext db, Active
     {
         var x = await db.Operations.AsNoTracking().Include(x => x.Settlements).SingleOrDefaultAsync(x => x.Id == id);
         if (x is null) return NotFound();
+        if(x.TypeCode==TransferService.TypeCode) return RedirectToPage("/Operations/Transfers/Edit",new { id });
         await Load();
         Input = new InputModel
         {
@@ -83,6 +84,7 @@ public sealed class EditModel(Dispatcher dispatcher, FinanceDbContext db, Active
 
     public async Task<IActionResult> OnPostAsync()
     {
+        if(await db.Operations.AnyAsync(x=>x.Id==Input.Id && x.TypeCode==TransferService.TypeCode)) return BadRequest();
         Input.CompanyId = active.RequiredId;
         ModelState.Remove("Input.CompanyId");
         var companyKind = await db.Companies.AsNoTracking().Where(x => x.Id == active.RequiredId).Select(x => (CompanyKind?)x.Kind).SingleOrDefaultAsync();

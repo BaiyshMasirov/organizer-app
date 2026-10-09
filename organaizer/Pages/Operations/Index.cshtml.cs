@@ -15,6 +15,8 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
     public const int PageSize = 20;
     public const string DateDescending = "dateDesc";
     public const string DateAscending = "dateAsc";
+    public static string TypeName(string code) => code == TransferService.TypeCode ? TransferService.Title : OperationTypes.All.GetValueOrDefault(code,code);
+    public static DateTimeOffset DisplayDate(TradeOperation item) => item.TypeCode==TransferService.TypeCode ? item.OccurredAt.ToOffset(TimeSpan.FromHours(5)) : item.OccurredAt;
 
     public List<TradeOperation> Items { get; private set; } = [];
     public List<Domain.Company> Companies { get; private set; } = [];
@@ -67,9 +69,10 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
             var row = index + 2;
             var operation = items[index];
             sheet.Cells[row, 1].Value = index + 1;
-            sheet.Cells[row, 2].Value = operation.OccurredAt.DateTime;
+            sheet.Cells[row, 2].Value = DisplayDate(operation).DateTime;
             sheet.Cells[row, 2].Style.Numberformat.Format = "dd.mm.yyyy";
-            sheet.Cells[row, 3].Value = $"{OperationTypes.All.GetValueOrDefault(operation.TypeCode, operation.TypeCode)}\n{operation.Counterparty?.Name ?? "Без клиента"}";
+            var transfer=operation.TypeCode==TransferService.TypeCode;
+            sheet.Cells[row, 3].Value = $"{TypeName(operation.TypeCode)}\n{(transfer ? operation.Note : operation.Counterparty?.Name ?? "Без клиента")}";
             sheet.Cells[row, 3].Style.WrapText = true;
             SetNumberCell(sheet.Cells[row, 4], operation.SellAmount);
             sheet.Cells[row, 5].Value = operation.SellCurrency;
@@ -77,10 +80,9 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
             SetNumberCell(sheet.Cells[row, 7], operation.BuyAmount);
             sheet.Cells[row, 8].Value = operation.BuyCurrency;
             sheet.Cells[row, 9].Value = operation.DestinationAccount ?? "—";
-            var rate = OperationTypes.CanonicalRate(operation.TypeCode, operation.SellCurrency, operation.SellAmount, operation.BuyCurrency, operation.BuyAmount);
+            var rate = transfer ? null : OperationTypes.CanonicalRate(operation.TypeCode, operation.SellCurrency, operation.SellAmount, operation.BuyCurrency, operation.BuyAmount);
             sheet.Cells[row, 10].Value = rate.HasValue ? $"{rate.Value:N8} {OperationTypes.RateLabel(operation.TypeCode)}" : "—";
-            SetNumberCell(sheet.Cells[row, 11], operation.BaseCurrencyProfit);
-            sheet.Cells[row, 12].Value = "USD";
+            if(!transfer) { SetNumberCell(sheet.Cells[row, 11], operation.BaseCurrencyProfit);sheet.Cells[row, 12].Value = "USD"; }
         }
 
         using (var header = sheet.Cells[1, 1, 1, headers.Length])
@@ -118,6 +120,7 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
 
     public async Task<IActionResult> OnPostCompleteAsync(Guid id, string? search, string? typeCode, string? status, DateTime? from, DateTime? to, string? sort, int pageNumber = 1)
     {
+        if(await db.Operations.AnyAsync(x=>x.Id==id && x.TypeCode==TransferService.TypeCode)) return BadRequest();
         await dispatcher.Send(new CompleteOperationCommand(id));
         TempData["Message"] = "Операция завершена";
         return RedirectToPage(new { search, typeCode, status, from = from?.ToString("yyyy-MM-dd"), to = to?.ToString("yyyy-MM-dd"), sort, pageNumber });
@@ -125,6 +128,7 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
 
     public async Task<IActionResult> OnPostCancelAsync(Guid id, string? search, Guid? companyId, string? typeCode, string? status, DateTime? from, DateTime? to, string? sort, int pageNumber = 1)
     {
+        if(await db.Operations.AnyAsync(x=>x.Id==id && x.TypeCode==TransferService.TypeCode)) return RedirectToPage("/Operations/Transfers/Details",new { id });
         await dispatcher.Send(new CancelOperationCommand(id));
         TempData["Message"] = "Операция отменена";
         return RedirectToPage(new { search, companyId, typeCode, status, from = from?.ToString("yyyy-MM-dd"), to = to?.ToString("yyyy-MM-dd"), sort, pageNumber });
@@ -132,6 +136,7 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
 
     public async Task<IActionResult> OnPostReactivateAsync(Guid id, string? search, Guid? companyId, string? typeCode, string? status, DateTime? from, DateTime? to, string? sort, int pageNumber = 1)
     {
+        if(await db.Operations.AnyAsync(x=>x.Id==id && x.TypeCode==TransferService.TypeCode)) return BadRequest();
         var restored = await dispatcher.Send(new ReactivateOperationCommand(id));
         TempData["Message"] = restored ? "Операция восстановлена и переведена в статус «Создана»" : "Операцию не удалось восстановить";
         return RedirectToPage(new { search, companyId, typeCode, status, from = from?.ToString("yyyy-MM-dd"), to = to?.ToString("yyyy-MM-dd"), sort, pageNumber });
@@ -156,7 +161,11 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
             query = query.Where(x =>
                 (x.Counterparty != null && x.Counterparty.Name.ToLower().Contains(term)) ||
                 x.SellCurrency.ToLower().Contains(term) ||
-                x.BuyCurrency.ToLower().Contains(term));
+                x.BuyCurrency.ToLower().Contains(term) ||
+                (x.TypeCode==TransferService.TypeCode &&
+                 ((x.SourceAccount!=null && x.SourceAccount.ToLower().Contains(term)) ||
+                  (x.DestinationAccount!=null && x.DestinationAccount.ToLower().Contains(term)) ||
+                  (x.Note!=null && x.Note.ToLower().Contains(term)))));
         }
         if (!string.IsNullOrWhiteSpace(typeCode)) query = query.Where(x => x.TypeCode == typeCode);
         query = status switch
@@ -169,12 +178,14 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
         if (from.HasValue)
         {
             var start = new DateTimeOffset(DateTime.SpecifyKind(from.Value.Date, DateTimeKind.Utc));
-            query = query.Where(x => x.OccurredAt >= start);
+            var transferStart=TransferService.Instant(from.Value);
+            query = query.Where(x => x.TypeCode==TransferService.TypeCode ? x.OccurredAt>=transferStart : x.OccurredAt >= start);
         }
         if (to.HasValue)
         {
             var end = new DateTimeOffset(DateTime.SpecifyKind(to.Value.Date.AddDays(1), DateTimeKind.Utc));
-            query = query.Where(x => x.OccurredAt < end);
+            var transferEnd=TransferService.Instant(to.Value.AddDays(1));
+            query = query.Where(x => x.TypeCode==TransferService.TypeCode ? x.OccurredAt<transferEnd : x.OccurredAt < end);
         }
         return query;
     }

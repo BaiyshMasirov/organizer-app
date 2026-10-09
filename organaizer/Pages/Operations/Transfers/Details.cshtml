@@ -1,0 +1,21 @@
+@page "{id:guid}"
+@model organaizer.Pages.Operations.Transfers.DetailsModel
+@using organaizer.Domain
+@using organaizer.Infrastructure
+@{ ViewData["Title"]=TransferService.Title;var t=Model.Transfer;var cancelled=t.Status==OperationStatus.Cancelled; }
+<div class="d-flex justify-content-between mb-4"><h1>@TransferService.Title</h1><a asp-page="/Operations/Index" class="btn btn-light">К операциям</a></div>
+@if(TempData["Message"] is string message){<div class="alert alert-success">@message</div>}
+@if(TempData["TransferError"] is string error){<div class="alert alert-danger">@error</div>}
+<div class="card card-body mb-4">
+  <div class="mb-3"><span class="badge @(cancelled?"bg-secondary-lt":"bg-green-lt")">@(cancelled?"Отменён":"Выполнен")</span> <span class="ms-3">@t.OccurredAt.ToOffset(TimeSpan.FromHours(5)).ToString("dd.MM.yyyy")</span></div>
+  <div class="row g-3"><div class="col-md-6"><div class="text-secondary">Со счёта</div><strong>@t.SourceAccount</strong></div><div class="col-md-6"><div class="text-secondary">На счёт</div><strong>@t.DestinationAccount</strong></div></div>
+  <div class="my-3 fs-2">@t.SellAmount.ToString("N2") @t.SellCurrency</div><div>@t.Note</div>
+  <div class="text-secondary mt-3">Перевод не влияет на доход, расход и прибыль компании.</div>
+  @if(!cancelled && await Permissions.HasAsync(User,AppPermissions.Operations.Edit)){
+    <div class="btn-list mt-4"><a asp-page="Edit" asp-route-id="@t.Id" class="btn btn-primary">Редактировать</a>
+    <form method="post" asp-page-handler="Cancel" onsubmit="return confirm('Отменить перевод? Его влияние на остатки будет убрано, запись сохранится.');"><input name="revision" value="@Model.Revision" type="hidden"/><button class="btn btn-outline-danger">Отменить перевод</button></form></div>
+  }
+</div>
+<div class="card"><div class="card-header"><h2 class="card-title">История изменений</h2></div><div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>Когда / кто</th><th>Действие</th><th>Дата перевода</th><th>Со счёта → на счёт</th><th>Сумма</th><th>Комментарий</th></tr></thead><tbody>
+@foreach(var h in Model.History){<tr><td>@h.ChangedAt.ToOffset(TimeSpan.FromHours(5)).ToString("dd.MM.yyyy HH:mm")<div class="small text-secondary">@h.Actor</div></td><td>@h.Action</td><td>@h.OccurredAt.ToOffset(TimeSpan.FromHours(5)).ToString("dd.MM.yyyy")</td><td>@h.FromAccount → @h.ToAccount</td><td class="text-nowrap">@h.Amount.ToString("N2") @h.Currency</td><td>@h.Note</td></tr>}
+</tbody></table></div></div>
