@@ -89,7 +89,7 @@ public static class LiquidityMonthImporter
         Money(operation.SellAmount)==Money(item.SellAmount) && Money(operation.BuyAmount)==Money(item.BuyAmount) &&
         operation.SellCurrency==item.SellCurrency && operation.BuyCurrency==item.BuyCurrency &&
         operation.OccurredAt==item.OccurredAt && operation.TypeCode==item.TypeCode &&
-        operation.Counterparty?.Name.Trim()==item.Counterparty?.Trim();
+        string.Equals(operation.Counterparty?.Name.Trim(),item.Counterparty?.Trim(),StringComparison.OrdinalIgnoreCase);
 
     private static bool MatchesOriginal(TradeOperation operation,HistoricalImportRecord original)
     {
@@ -100,7 +100,7 @@ public static class LiquidityMonthImporter
             Money(sent)==Money(operation.SellAmount) && Money(received)==Money(operation.BuyAmount) &&
             cells[10].GetString()==operation.SellCurrency && cells[5].GetString()==operation.BuyCurrency &&
             cells[1].TryGetDouble(out var serial) && DateTime.FromOADate(serial).Date==operation.OccurredAt.UtcDateTime.Date &&
-            cells[3].GetString()?.Trim()==operation.Counterparty?.Name.Trim() &&
+            string.Equals(cells[3].GetString()?.Trim(),operation.Counterparty?.Name.Trim(),StringComparison.OrdinalIgnoreCase) &&
             operation.Status==OperationStatus.Settled && operation.BaseCurrencyProfit==0 && string.IsNullOrWhiteSpace(operation.Note);
     }
 }
