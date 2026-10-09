@@ -99,7 +99,7 @@ public static class HistoricalDataImporter
         await db.SaveChangesAsync();
     }
 
-    private static IEnumerable<ExpenseRecord> ExtractEmbeddedExpenses(IEnumerable<RawRecord> records)
+    internal static IEnumerable<ExpenseRecord> ExtractEmbeddedExpenses(IEnumerable<RawRecord> records)
     {
         var months=new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase){{"январь",1},{"февраль",2},{"март",3},{"апрель",4},{"май",5},{"июнь",6},{"июль",7},{"август",8},{"сентябрь",9},{"октябрь",10},{"ноябрь",11},{"декабрь",12}};
         foreach(var sheet in records.Where(x=>x.SourceKey.StartsWith("liquidity|",StringComparison.OrdinalIgnoreCase)).GroupBy(x=>x.SourceSheet))
@@ -128,7 +128,7 @@ public static class HistoricalDataImporter
         }
     }
 
-    private static IEnumerable<ExchangeRate> ExtractSummaryRates(IEnumerable<RawRecord> records)
+    internal static IEnumerable<ExchangeRate> ExtractSummaryRates(IEnumerable<RawRecord> records)
     {
         foreach(var sheet in records.Where(x=>x.SourceKey.StartsWith("liquidity|",StringComparison.OrdinalIgnoreCase)).GroupBy(x=>x.SourceSheet))
         {
@@ -146,7 +146,7 @@ public static class HistoricalDataImporter
         }
     }
 
-    private static IEnumerable<MonthlyCurrencyResult> ExtractMonthlyResults(IEnumerable<RawRecord> records)
+    internal static IEnumerable<MonthlyCurrencyResult> ExtractMonthlyResults(IEnumerable<RawRecord> records)
     {
         foreach(var sheet in records.Where(x=>x.SourceKey.StartsWith("liquidity|",StringComparison.OrdinalIgnoreCase)).GroupBy(x=>x.SourceSheet))
         {

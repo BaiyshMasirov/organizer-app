@@ -54,7 +54,9 @@ legacyDb.Companies.Add(new Company { Id=Guid.NewGuid(), Name="A&A Liquidity", Ki
 await legacyDb.SaveChangesAsync();
 var payload = System.Text.Json.JsonSerializer.Deserialize<HistoricalDataImporter.ImportPayload>(
     await File.ReadAllTextAsync(path), new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive=true })!;
-var legacy = payload with { Operations=payload.Operations.Where(x=>x.SellAmount>0 && x.BuyAmount>0)
+var legacy = payload with { Records=payload.Records.Select(x=>x.SourceRow>=394
+        ? x with { SourceRow=x.SourceRow+1000, SourceKey=$"liquidity|{x.SourceSheet}|{x.SourceRow+1000}" } : x).ToList(),
+    Operations=payload.Operations.Where(x=>x.SellAmount>0 && x.BuyAmount>0)
     .Select(x=>x with { SourceAccount=x.DestinationAccount, DestinationAccount=x.SourceAccount }).ToList() };
 var legacyPath = Path.GetTempFileName();
 try
@@ -67,5 +69,9 @@ try
     var repaired = await legacyDb.Operations.SingleAsync(x=>x.ImportKey=="liquidity|Август 2026|3");
     Check(repaired.SourceAccount=="Vexel" && repaired.DestinationAccount=="BAKAI",
         "Legacy reversed bank labels are repaired for operations without manual payments");
+    var upgradedReport=await new MonthlyReportHandler(legacyDb).Handle(new(await legacyDb.Companies.Select(x=>x.Id).SingleAsync(),from,to),default);
+    Check(Math.Abs(upgradedReport.NetProfit-412133.1297m)<0.01m && Math.Abs(upgradedReport.Expenses-151460.7926m)<0.01m
+        && await legacyDb.MonthlyBalanceSnapshots.CountAsync()==4,
+        "Shifted Excel summary and expense rows reconcile without duplicate monthly figures");
 }
 finally { File.Delete(legacyPath); }

@@ -20,6 +20,23 @@ public static class LiquidityMonthImporter
             throw new InvalidOperationException("Импорт должен содержать ровно один лист и месяц");
 
         await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync() : null;
+        var sheet=payload.Records[0].SourceSheet;
+        var expensePrefix=$"embedded-expense|liquidity|{sheet}|";
+        var adjustmentPrefix=$"embedded-expense-adjustment|{sheet}|";
+        var desiredExpenses=payload.Expenses.Concat(HistoricalDataImporter.ExtractEmbeddedExpenses(payload.Records)).Select(x=>x.SourceKey).ToHashSet();
+        var oldExpenses=await db.Expenses.IgnoreQueryFilters().Where(x=>x.ImportKey!=null &&
+            (x.ImportKey.StartsWith(expensePrefix) || x.ImportKey.StartsWith(adjustmentPrefix))).ToListAsync();
+        db.Expenses.RemoveRange(oldExpenses.Where(x=>!desiredExpenses.Contains(x.ImportKey!)));
+        var ratePrefix=$"summary-rate|liquidity|{sheet}|";
+        var desiredRates=HistoricalDataImporter.ExtractSummaryRates(payload.Records).Select(x=>x.ImportKey).ToHashSet();
+        var oldRates=await db.ExchangeRates.Where(x=>x.ImportKey!=null && x.ImportKey.StartsWith(ratePrefix)).ToListAsync();
+        db.ExchangeRates.RemoveRange(oldRates.Where(x=>!desiredRates.Contains(x.ImportKey)));
+        var desiredResults=HistoricalDataImporter.ExtractMonthlyResults(payload.Records).ToList();
+        var period=new DateTimeOffset(periods[0].Year,periods[0].Month,1,0,0,0,TimeSpan.Zero);
+        var resultCurrencies=desiredResults.Select(x=>x.Currency).ToHashSet();
+        var oldResults=await db.MonthlyCurrencyResults.Where(x=>x.Period==period).ToListAsync();
+        db.MonthlyCurrencyResults.RemoveRange(oldResults.Where(x=>!resultCurrencies.Contains(x.Currency)));
+        await db.SaveChangesAsync();
         await HistoricalDataImporter.ImportAsync(db, path);
         var companyId = await db.Companies.Where(x => x.Kind == CompanyKind.LiquidityProvider).Select(x => x.Id).SingleAsync();
         var keys = payload.Operations.Select(x => x.SourceKey).ToList();
