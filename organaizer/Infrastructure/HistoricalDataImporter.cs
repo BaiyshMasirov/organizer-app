@@ -195,12 +195,29 @@ public static class HistoricalDataImporter
     private static string Text(JsonElement value)=>value.ValueKind==JsonValueKind.String?(value.GetString()??"").Trim():value.ToString().Trim();
     private static void Upsert<T>(FinanceDbContext db, Dictionary<string,T> existing, string key, T incoming) where T : class
     {
-        if(existing.TryGetValue(key,out var current))
+        // Summary rows move when Excel gains operations. Their identity is month +
+        // currency/pair, not their physical row number in the source workbook.
+        static string BusinessKey(object value) => value switch
+        {
+            MonthlyCurrencyResult x => $"{x.Period:O}|{x.Currency}",
+            MonthlyBalanceSnapshot x => $"{x.Period:O}|{x.Currency}",
+            MonthlyExpenseTotal x => $"{x.Period:O}|{x.Currency}",
+            MonthlyPurchaseTotal x => $"{x.Period:O}|{x.Pair}",
+            MonthlySaleTotal x => $"{x.Period:O}|{x.Pair}",
+            _ => throw new InvalidOperationException("Неизвестный месячный итог")
+        };
+        var matches=existing.Where(x=>BusinessKey(x.Value)==BusinessKey(incoming)).ToList();
+        var current=matches.FirstOrDefault(x=>x.Key==key).Value ?? matches.FirstOrDefault().Value;
+        foreach(var duplicate in matches.Where(x=>!ReferenceEquals(x.Value,current)))
+        { db.Set<T>().Remove(duplicate.Value);existing.Remove(duplicate.Key); }
+        if(current is not null)
         {
             var entry=db.Entry(current);
             var id=entry.Property("Id").CurrentValue;
             typeof(T).GetProperty("Id")!.SetValue(incoming,id);
+            foreach(var oldKey in existing.Where(x=>ReferenceEquals(x.Value,current)).Select(x=>x.Key).ToList()) existing.Remove(oldKey);
             entry.CurrentValues.SetValues(incoming);
+            existing[key]=current;
         }
         else { db.Set<T>().Add(incoming);existing.Add(key,incoming); }
     }
