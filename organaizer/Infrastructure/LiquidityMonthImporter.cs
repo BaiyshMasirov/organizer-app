@@ -20,6 +20,19 @@ public static class LiquidityMonthImporter
             throw new InvalidOperationException("Импорт должен содержать ровно один лист и месяц");
 
         await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync() : null;
+        var companyId = await db.Companies.Where(x => x.Kind == CompanyKind.LiquidityProvider).Select(x => x.Id).SingleAsync();
+        var keys = payload.Operations.Select(x => x.SourceKey).ToList();
+        var originalRows=await db.HistoricalImportRecords.Where(x=>keys.Contains(x.SourceKey)).ToDictionaryAsync(x=>x.SourceKey);
+        var previousOperations=await db.Operations.IgnoreQueryFilters().Include(x=>x.Counterparty).Include(x=>x.Settlements)
+            .Where(x=>x.CompanyId==companyId && keys.Contains(x.ImportKey!)).ToDictionaryAsync(x=>x.ImportKey!);
+        var refreshKeys=new HashSet<string>();
+        foreach(var item in payload.Operations)
+        {
+            if(!previousOperations.TryGetValue(item.SourceKey,out var previous) || previous.Status==OperationStatus.Cancelled || Matches(previous,item)) continue;
+            if(previous.Settlements.Count>0 || !originalRows.TryGetValue(item.SourceKey,out var original) || !MatchesOriginal(previous,original))
+                throw new InvalidOperationException($"Операция {item.SourceKey} изменена вручную или имеет платежи; необходима сверка.");
+            refreshKeys.Add(item.SourceKey);
+        }
         var sheet=payload.Records[0].SourceSheet;
         var expensePrefix=$"embedded-expense|liquidity|{sheet}|";
         var adjustmentPrefix=$"embedded-expense-adjustment|{sheet}|";
@@ -37,9 +50,7 @@ public static class LiquidityMonthImporter
         var oldResults=await db.MonthlyCurrencyResults.Where(x=>x.Period==period).ToListAsync();
         db.MonthlyCurrencyResults.RemoveRange(oldResults.Where(x=>!resultCurrencies.Contains(x.Currency)));
         await db.SaveChangesAsync();
-        await HistoricalDataImporter.ImportAsync(db, path);
-        var companyId = await db.Companies.Where(x => x.Kind == CompanyKind.LiquidityProvider).Select(x => x.Id).SingleAsync();
-        var keys = payload.Operations.Select(x => x.SourceKey).ToList();
+        await HistoricalDataImporter.ImportAsync(db, path, refreshKeys);
         var operations = await db.Operations.IgnoreQueryFilters().Include(x => x.Settlements)
             .Where(x => x.CompanyId == companyId && keys.Contains(x.ImportKey!)).ToDictionaryAsync(x => x.ImportKey!);
         var accounts = await db.Accounts.IgnoreQueryFilters().Include(x => x.FinancialInstitution)
@@ -49,7 +60,7 @@ public static class LiquidityMonthImporter
             var operation = operations[item.SourceKey];
             // Respect cancellations and manual/partial payments. Import never replaces these.
             if (operation.Status == OperationStatus.Cancelled || operation.Settlements.Count > 0) continue;
-            if (operation.SellAmount != item.SellAmount || operation.BuyAmount != item.BuyAmount ||
+            if (Money(operation.SellAmount) != Money(item.SellAmount) || Money(operation.BuyAmount) != Money(item.BuyAmount) ||
                 operation.SellCurrency != item.SellCurrency || operation.BuyCurrency != item.BuyCurrency ||
                 operation.OccurredAt != item.OccurredAt)
                 throw new InvalidOperationException($"Операция {item.SourceKey} изменена вручную; необходимо сверить движения перед импортом");
@@ -71,5 +82,25 @@ public static class LiquidityMonthImporter
         }
         await db.SaveChangesAsync();
         if (transaction is not null) await transaction.CommitAsync();
+    }
+
+    private static decimal Money(decimal value)=>Math.Round(value,8,MidpointRounding.AwayFromZero);
+    private static bool Matches(TradeOperation operation,HistoricalDataImporter.OperationRecord item)=>
+        Money(operation.SellAmount)==Money(item.SellAmount) && Money(operation.BuyAmount)==Money(item.BuyAmount) &&
+        operation.SellCurrency==item.SellCurrency && operation.BuyCurrency==item.BuyCurrency &&
+        operation.OccurredAt==item.OccurredAt && operation.TypeCode==item.TypeCode &&
+        operation.Counterparty?.Name.Trim()==item.Counterparty?.Trim();
+
+    private static bool MatchesOriginal(TradeOperation operation,HistoricalImportRecord original)
+    {
+        using var data=JsonDocument.Parse(original.DataJson);
+        var cells=data.RootElement.GetProperty("cells");
+        return cells.GetArrayLength()>11 && cells[9].ValueKind==JsonValueKind.Number && cells[4].ValueKind==JsonValueKind.Number &&
+            cells[1].ValueKind==JsonValueKind.Number && cells[9].TryGetDecimal(out var sent) && cells[4].TryGetDecimal(out var received) &&
+            Money(sent)==Money(operation.SellAmount) && Money(received)==Money(operation.BuyAmount) &&
+            cells[10].GetString()==operation.SellCurrency && cells[5].GetString()==operation.BuyCurrency &&
+            cells[1].TryGetDouble(out var serial) && DateTime.FromOADate(serial).Date==operation.OccurredAt.UtcDateTime.Date &&
+            cells[3].GetString()?.Trim()==operation.Counterparty?.Name.Trim() &&
+            operation.Status==OperationStatus.Settled && operation.BaseCurrencyProfit==0 && string.IsNullOrWhiteSpace(operation.Note);
     }
 }

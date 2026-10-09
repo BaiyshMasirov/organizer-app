@@ -6,7 +6,7 @@ namespace organaizer.Infrastructure;
 
 public static class HistoricalDataImporter
 {
-    public static async Task ImportAsync(FinanceDbContext db, string? path)
+    public static async Task ImportAsync(FinanceDbContext db, string? path, HashSet<string>? refreshKeys = null)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
         await using var stream=File.OpenRead(path);
@@ -23,10 +23,13 @@ public static class HistoricalDataImporter
         }
         await db.SaveChangesAsync();
         var operationKeys=(await db.Operations.Where(x=>x.ImportKey!=null).Select(x=>x.ImportKey!).ToListAsync()).ToHashSet();
-        foreach(var item in payload.Operations.Where(x=>operationKeys.Add(x.SourceKey)))
+        var refreshing=refreshKeys is { Count: > 0 } ? await db.Operations.Where(x=>refreshKeys.Contains(x.ImportKey!)).ToDictionaryAsync(x=>x.ImportKey!) : new Dictionary<string,TradeOperation>();
+        foreach(var item in payload.Operations.Where(x=>operationKeys.Add(x.SourceKey)||refreshing.ContainsKey(x.SourceKey)))
         {
             var company=companies[item.CompanyKind];var client=FindOrCreateClient(db,clientCache,company.Id,item.Counterparty);
-            db.Operations.Add(new TradeOperation{Id=Guid.NewGuid(),CompanyId=company.Id,CounterpartyId=client?.Id,TypeCode=item.TypeCode,OccurredAt=item.OccurredAt,DueAt=null,SellCurrency=item.SellCurrency,SellAmount=item.SellAmount,BuyCurrency=item.BuyCurrency,BuyAmount=item.BuyAmount,FeeAmount=item.FeeAmount,FeeCurrency=item.FeeCurrency,BaseCurrencyProfit=item.BaseCurrencyProfit,Status=OperationStatus.Settled,Note=item.Note,ExchangeRate=item.ExchangeRate,SourceAccount=item.SourceAccount,DestinationAccount=item.DestinationAccount,ImportKey=item.SourceKey});
+            refreshing.TryGetValue(item.SourceKey,out var current);
+            var imported=new TradeOperation{Id=current?.Id??Guid.NewGuid(),CreatedAt=current?.CreatedAt,CompanyId=company.Id,CounterpartyId=client?.Id,TypeCode=item.TypeCode,OccurredAt=item.OccurredAt,DueAt=null,SellCurrency=item.SellCurrency,SellAmount=item.SellAmount,BuyCurrency=item.BuyCurrency,BuyAmount=item.BuyAmount,FeeAmount=item.FeeAmount,FeeCurrency=item.FeeCurrency,BaseCurrencyProfit=item.BaseCurrencyProfit,Status=OperationStatus.Settled,Note=item.Note,ExchangeRate=item.ExchangeRate,SourceAccount=item.SourceAccount,DestinationAccount=item.DestinationAccount,ImportKey=item.SourceKey};
+            if(current is null) db.Operations.Add(imported);else db.Entry(current).CurrentValues.SetValues(imported);
         }
         await db.SaveChangesAsync();
         await EnsureOperationAccounts(db,companies,payload.Operations);
@@ -37,7 +40,7 @@ public static class HistoricalDataImporter
             if(sellBase==buyBase)continue;
             var currency=sellBase?item.BuyCurrency:item.SellCurrency;var amount=sellBase?item.BuyAmount:item.SellAmount;var usd=sellBase?item.SellAmount:item.BuyAmount;
             var key=$"rate|{item.SourceKey}|{currency}";if(amount<=0)continue;
-            if(importedRates.TryGetValue(key,out var existingRate)){existingRate.SourceOrder=SourceRow(item.SourceKey);continue;}
+            if(importedRates.TryGetValue(key,out var existingRate)){existingRate.SourceOrder=SourceRow(item.SourceKey);existingRate.RateToUsd=usd/amount;continue;}
             if(!rateKeys.Add(key))continue;
             db.ExchangeRates.Add(new ExchangeRate{Id=Guid.NewGuid(),Currency=currency,EffectiveAt=item.OccurredAt,SourceOrder=SourceRow(item.SourceKey),RateToUsd=usd/amount,Note="Импортировано из последней операции Excel",ImportKey=key});
         }

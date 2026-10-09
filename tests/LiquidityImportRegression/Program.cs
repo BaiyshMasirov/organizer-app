@@ -63,10 +63,23 @@ try
 {
     await File.WriteAllTextAsync(legacyPath,System.Text.Json.JsonSerializer.Serialize(legacy));
     await HistoricalDataImporter.ImportAsync(legacyDb,legacyPath);
+    var oldOperation=await legacyDb.Operations.SingleAsync(x=>x.ImportKey=="liquidity|Август 2026|3");
+    var oldId=oldOperation.Id;
+    oldOperation.SellAmount=398207.17m;
+    oldOperation.BuyAmount=399600.1m;
+    oldOperation.Note=null;
+    var oldRaw=await legacyDb.HistoricalImportRecords.SingleAsync(x=>x.SourceKey==oldOperation.ImportKey);
+    var oldJson=System.Text.Json.Nodes.JsonNode.Parse(oldRaw.DataJson)!;
+    oldJson["cells"]![9]=oldOperation.SellAmount;
+    oldJson["cells"]![4]=oldOperation.BuyAmount;
+    oldRaw.DataJson=oldJson.ToJsonString();
+    await legacyDb.SaveChangesAsync();
     await LiquidityMonthImporter.ImportAsync(legacyDb,path);
     Check(await legacyDb.Operations.CountAsync()==385 && await legacyDb.Settlements.CountAsync()==755,
         "Upgrading legacy August import fills missing rows and bank payments without duplicates");
     var repaired = await legacyDb.Operations.SingleAsync(x=>x.ImportKey=="liquidity|Август 2026|3");
+    Check(repaired.Id==oldId && repaired.SellAmount==27959.5m && repaired.BuyAmount==28100m,
+        "Updated source refreshes untouched original imports while preserving operation identity");
     Check(repaired.SourceAccount=="Vexel" && repaired.DestinationAccount=="BAKAI",
         "Legacy reversed bank labels are repaired for operations without manual payments");
     var upgradedReport=await new MonthlyReportHandler(legacyDb).Handle(new(await legacyDb.Companies.Select(x=>x.Id).SingleAsync(),from,to),default);
