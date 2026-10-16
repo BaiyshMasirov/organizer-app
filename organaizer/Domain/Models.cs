@@ -130,6 +130,7 @@ public sealed class Expense
     public decimal Amount { get; set; }
     [MaxLength(5)] public required string Currency { get; set; }
     public decimal BaseCurrencyAmount { get; set; }
+    public decimal? ManualUsdAmount { get; set; }
     [MaxLength(300)] public string? Note { get; set; }
     [MaxLength(300)] public string? ImportKey { get; set; }
 }

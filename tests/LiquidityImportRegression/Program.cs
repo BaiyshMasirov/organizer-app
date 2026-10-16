@@ -86,5 +86,12 @@ try
     Check(Math.Abs(upgradedReport.NetProfit-412133.1297m)<0.01m && Math.Abs(upgradedReport.Expenses-151460.7926m)<0.01m
         && await legacyDb.MonthlyBalanceSnapshots.CountAsync()==4,
         "Shifted Excel summary and expense rows reconcile without duplicate monthly figures");
+    var manualExpense=await legacyDb.Expenses.FirstAsync();
+    manualExpense.ManualUsdAmount=7.25m;
+    manualExpense.BaseCurrencyAmount=7.25m;
+    await legacyDb.SaveChangesAsync();
+    await LiquidityMonthImporter.ImportAsync(legacyDb,path);
+    Check(manualExpense.ManualUsdAmount==7.25m && manualExpense.BaseCurrencyAmount==7.25m,
+        "Repeat historical import preserves the accountant's manual USD valuation");
 }
 finally { File.Delete(legacyPath); }

@@ -1015,3 +1015,22 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261016115232_AddManualExpenseUsdAmount') THEN
+    ALTER TABLE "Expenses" ADD "ManualUsdAmount" numeric(24,8);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261016115232_AddManualExpenseUsdAmount') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20261016115232_AddManualExpenseUsdAmount', '8.0.8');
+    END IF;
+END $EF$;
+COMMIT;
+

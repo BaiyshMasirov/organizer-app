@@ -54,6 +54,7 @@ public sealed class FinanceDbContext(DbContextOptions<FinanceDbContext> options,
         b.Entity<TradeOperation>().HasIndex(x => x.ImportKey).IsUnique();
         b.Entity<TradeOperation>().Property(x => x.ExchangeRate).HasPrecision(30, 15);
         b.Entity<Expense>().HasIndex(x => x.ImportKey).IsUnique();
+        b.Entity<Expense>().Property(x => x.ManualUsdAmount).HasPrecision(24, 8);
         b.Entity<ExchangeRate>().HasIndex(x => new { x.Currency, x.EffectiveAt });
         b.Entity<ExchangeRate>().HasIndex(x => x.ImportKey).IsUnique();
         b.Entity<ExchangeRate>().Property(x => x.RateToUsd).HasPrecision(30,15);

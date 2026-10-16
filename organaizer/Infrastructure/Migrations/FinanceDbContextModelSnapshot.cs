@@ -446,6 +446,10 @@ namespace organaizer.Infrastructure.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<decimal?>("ManualUsdAmount")
+                        .HasPrecision(24, 8)
+                        .HasColumnType("numeric(24,8)");
+
                     b.Property<string>("Note")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");

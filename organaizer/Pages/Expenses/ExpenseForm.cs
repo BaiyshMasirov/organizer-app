@@ -6,4 +6,7 @@ public sealed class ExpenseForm
     [Required]public DateTime OccurredAt{get;set;}=DateTime.Today;[Required,StringLength(120)]public string Category{get;set;}="";
     [Range(typeof(decimal),"0.00000001","9999999999999999")]public decimal Amount{get;set;}[Required,StringLength(5)]public string Currency{get;set;}="USD";
     [StringLength(300)]public string?Note{get;set;}
+    public bool UseManualUsdAmount { get; set; }
+    [Range(typeof(decimal),"0","9999999999999999")]
+    public decimal? AmountUsd { get; set; }
 }

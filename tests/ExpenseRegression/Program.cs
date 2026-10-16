@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using OfficeOpenXml;
 using organaizer.Application;
@@ -142,6 +143,41 @@ using(var historyPackage=new ExcelPackage(new MemoryStream(historyExport.FileCon
     Check(sheet.Cells[detailHeaderRow+1,2].GetValue<DateTime>().Date==movementDate.Date,"Selected movement date is displayed in balance history export");
     Check(sheet.Cells[detailHeaderRow+1,6].GetValue<decimal>()==500m && sheet.Cells[detailHeaderRow+1,8].Text=="USD","Balance movement remains numeric with a separate currency column");
 }
+
+var manualDate=new DateTime(2026,9,2);
+var manualEdit=new EditModel(db,active) { Input=Form(kgs,630m), PageContext=pageContext };
+manualEdit.Input.Id=saved.Id;
+manualEdit.Input.OccurredAt=manualDate;
+manualEdit.Input.UseManualUsdAmount=true;
+manualEdit.Input.AmountUsd=7.20m;
+manualEdit.ModelState.Clear();
+Check(await ExpenseValuation.CalculateAsync(db,company.Id,630m,"KGS",manualDate) is null,"Manual edit fixture has no historic rate");
+Check(await manualEdit.OnPostAsync() is RedirectToPageResult && saved.ManualUsdAmount==7.20m && saved.BaseCurrencyAmount==7.20m,"Manual USD equivalent saves without a rate");
+var reopen=new EditModel(db,active) { PageContext=pageContext };
+await reopen.OnGetAsync(saved.Id);
+Check(reopen.Input.UseManualUsdAmount && reopen.Input.AmountUsd==7.20m,"Reopening preserves manual mode and amount");
+var bankBalance=await BalanceCalculator.GetAsync(db,kgs.Id);
+manualEdit.Input.AmountUsd=0m;
+Check(await manualEdit.OnPostAsync() is RedirectToPageResult && await ExpenseValuation.ResolveAsync(db,saved)==0m,"Explicit manual zero is respected");
+Check(await BalanceCalculator.GetAsync(db,kgs.Id)==bankBalance,"Changing only USD valuation does not affect account cash balance");
+var septemberFrom=new DateTimeOffset(manualDate,TimeSpan.Zero);
+var manualReport=await new MonthlyReportHandler(db).Handle(new(company.Id,septemberFrom,septemberFrom.AddDays(1)),default);
+Check(manualReport.Expenses==0m,"Reports use manual zero without falling back to a rate");
+manualEdit.Input.AmountUsd=8.10m;
+await manualEdit.OnPostAsync();
+await expenseList.OnGetAsync(company.Id,2026,9,null);
+Check(expenseList.UsdAmounts[saved.Id]==8.10m,"Expense list uses the stored manual equivalent");
+Check((await new DashboardHandler(db).Handle(new(company.Id,septemberFrom,septemberFrom.AddDays(1)),default)).Expenses==8.10m,"Dashboard uses the stored manual equivalent");
+manualEdit.Input.UseManualUsdAmount=false;
+Check(await manualEdit.OnPostAsync() is PageResult && saved.ManualUsdAmount==8.10m,"Automatic mode requires a rate and failed save preserves the manual value");
+db.NbkrExchangeRates.Add(new() { Id=Guid.NewGuid(), Currency="USD", EffectiveAt=septemberFrom, Feed="manual", Nominal=1, ValueInKgs=87.45m });
+await db.SaveChangesAsync();
+manualEdit.ModelState.Clear();
+Check(await manualEdit.OnPostAsync() is RedirectToPageResult && saved.ManualUsdAmount is null && saved.BaseCurrencyAmount==7.20m,"Returning to automatic mode clears the override and uses 87.45 KGS per USD");
+Check(await ExpenseValuation.CalculateAsync(db,company.Id,1018533m,"KGS",manualDate)==11647.03m,"September tax amount converts at the requested manual rate");
+manualEdit.Input.UseManualUsdAmount=true;
+manualEdit.Input.AmountUsd=null;
+Check(await manualEdit.OnPostAsync() is PageResult && saved.ManualUsdAmount is null,"Manual mode requires an explicit dollar amount");
 
 sealed class TestSession : ISession
 {

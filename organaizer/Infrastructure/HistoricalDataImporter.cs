@@ -62,7 +62,7 @@ public static class HistoricalDataImporter
         {
             var company=companies[item.CompanyKind];var accountName="Импорт: "+item.Account;var accountKey=$"{company.Id}|{item.Currency}|{accountName}";
             if(!accountCache.TryGetValue(accountKey,out var account)){account=new MoneyAccount{Id=Guid.NewGuid(),CompanyId=company.Id,Name=accountName,Kind=AccountKind.Bank,Currency=item.Currency};accountCache[accountKey]=account;db.Accounts.Add(account);}
-            if(importedExpenses.TryGetValue(item.SourceKey,out var existing)){existing.CompanyId=company.Id;existing.AccountId=account.Id;existing.OccurredAt=item.OccurredAt;existing.Category=item.Category;existing.Amount=item.Amount;existing.Currency=item.Currency;existing.BaseCurrencyAmount=item.BaseCurrencyAmount;existing.Note=item.Note;continue;}
+            if(importedExpenses.TryGetValue(item.SourceKey,out var existing)){existing.CompanyId=company.Id;existing.AccountId=account.Id;existing.OccurredAt=item.OccurredAt;existing.Category=item.Category;existing.Amount=item.Amount;existing.Currency=item.Currency;existing.BaseCurrencyAmount=existing.ManualUsdAmount??item.BaseCurrencyAmount;existing.Note=item.Note;continue;}
             if(expenseKeys.Add(item.SourceKey))db.Expenses.Add(new Expense{Id=Guid.NewGuid(),CompanyId=company.Id,AccountId=account.Id,OccurredAt=item.OccurredAt,Category=item.Category,Amount=item.Amount,Currency=item.Currency,BaseCurrencyAmount=item.BaseCurrencyAmount,Note=item.Note,ImportKey=item.SourceKey});
         }
         await db.SaveChangesAsync();

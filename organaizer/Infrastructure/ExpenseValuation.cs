@@ -19,7 +19,7 @@ public static class ExpenseValuation
 
     // Older forms saved zero even when the expense had a nonzero amount.
     public static async Task<decimal> ResolveAsync(FinanceDbContext db, Expense expense, CancellationToken ct = default)
-        => expense.BaseCurrencyAmount != 0 ? expense.BaseCurrencyAmount
+        => expense.ManualUsdAmount ?? (expense.BaseCurrencyAmount != 0 ? expense.BaseCurrencyAmount
             : await CalculateAsync(db, expense.CompanyId, expense.Amount, expense.Currency,
-                expense.OccurredAt.UtcDateTime, ct) ?? 0m;
+                expense.OccurredAt.UtcDateTime, ct) ?? 0m);
 }
