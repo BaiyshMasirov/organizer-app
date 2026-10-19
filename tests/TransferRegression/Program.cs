@@ -72,6 +72,22 @@ Check(history.Items.All(x=>x.Type!="Перевод"),"Cancelled cash effects are
 var dashboard=await new DashboardHandler(db).Handle(new(company.Id,from,to),default);
 Check(dashboard.Balances.Single(x=>x.Account=="BAKAI").Balance==1000 && dashboard.NetProfit==before.NetProfit,"Dashboard balances and profit remain correct after cancellation");
 
+var copySource=await db.Operations.SingleAsync(x=>x.Id==id);
+var copyRows=await db.AccountMovements.Where(x=>x.GroupId==id).ToListAsync();
+var movementCount=await db.AccountMovements.CountAsync();
+var copy=new organaizer.Pages.Operations.Transfers.CreateModel(db,active);
+Check(await copy.OnGetAsync(id) is Microsoft.AspNetCore.Mvc.RazorPages.PageResult && copy.IsCopy,
+    "Existing transfer opens a new transfer copy, including cancelled sources");
+Check(copy.Input.FromAccountId==copyRows.Single(x=>x.Amount<0).AccountId && copy.Input.ToAccountId==copyRows.Single(x=>x.Amount>0).AccountId &&
+    copy.Input.Amount==copySource.SellAmount && copy.Input.Note==copySource.Note && copy.Input.Revision==0,
+    "Transfer copy preserves accounts, amount and comment without source revision");
+Check(copy.Input.OccurredAt==new organaizer.Pages.Operations.Transfers.TransferForm().OccurredAt && await db.AccountMovements.CountAsync()==movementCount,
+    "Transfer copy defaults to today and creates no movements before saving");
+active.Select(other.Id);
+Check(await new organaizer.Pages.Operations.Transfers.CreateModel(db,active).OnGetAsync(id) is NotFoundResult,
+    "Transfer copy cannot read a different company's transfer");
+active.Select(company.Id);
+
 sealed class TestSession : ISession
 {
     private readonly Dictionary<string,byte[]> values=[];

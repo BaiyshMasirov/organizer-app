@@ -3,6 +3,7 @@
 @using organaizer.Infrastructure
 @{ ViewData["Title"]=TransferService.Title; }
 <div class="d-flex justify-content-between mb-4"><h1>Новый перевод между своими счетами</h1><a asp-page="/Operations/Index" class="btn btn-light">К операциям</a></div>
+@if(Model.IsCopy){<div class="alert alert-info">Данные скопированы в новый перевод. Проверьте дату, счета и сумму, затем сохраните.</div>}
 <form method="post" class="card card-body">
   <div asp-validation-summary="All" class="alert alert-danger"></div>
   <div class="row g-3">
