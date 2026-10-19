@@ -97,8 +97,6 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
         if (from is null || to is null || from.Id == to.Id || from.Currency != to.Currency || amount <= 0)
             return BalanceError("Выберите два разных счета в одной валюте и укажите сумму.");
         if (occurredAt == default) return BalanceError("Укажите дату перевода.");
-        var available = await BalanceCalculator.GetAsync(db, from.Id);
-        if (available < amount) return Insufficient(from.Name, available, amount, from.Currency);
         try { await new TransferService(db).CreateAsync(active.RequiredId, from.Id, to.Id, amount, occurredAt, note, User.Identity?.Name ?? "system"); }
         catch (ArgumentException ex) { return BalanceError(ex.Message); }
         TempData["Success"] = "Перевод сохранён. Движение отображается ниже и в истории счетов."; return RedirectToPage();
