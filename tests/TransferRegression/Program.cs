@@ -30,7 +30,6 @@ var before=await new MonthlyReportHandler(db).Handle(new(company.Id,from,to),def
 await Reject(async()=>{await service.CreateAsync(company.Id,a.Id,a.Id,10,date,null,"test");},"Same-account transfer rejected");
 await Reject(async()=>{await service.CreateAsync(company.Id,a.Id,rub.Id,10,date,null,"test");},"Mixed currencies rejected");
 await Reject(async()=>{await service.CreateAsync(company.Id,a.Id,foreign.Id,10,date,null,"test");},"Other company account rejected");
-await Reject(async()=>{await service.CreateAsync(company.Id,a.Id,b.Id,1001,date,null,"test");},"Insufficient funds rejected");
 var id=await service.CreateAsync(company.Id,a.Id,b.Id,300,date,"Initial comment","alice");
 Check(await BalanceCalculator.GetAsync(db,a.Id)==700 && await BalanceCalculator.GetAsync(db,b.Id)==350,"Creation moves balances once");
 Check(await db.Settlements.CountAsync()==0 && await db.AccountMovements.CountAsync()==2,"Transfer uses two cash movements and no trade settlements");
@@ -51,7 +50,6 @@ Check(await BalanceCalculator.GetAsync(db,a.Id)==550 && await BalanceCalculator.
 var rows=await db.AccountMovements.Where(x=>x.GroupId==id).ToListAsync();
 Check(rows.Count==2 && rows.Sum(x=>x.Amount)==0 && rows.All(x=>x.Revision==1 && x.Note!.Length==500 && x.OccurredAt.Offset==TimeSpan.Zero),"Edited pair remains balanced, UTC and at one revision");
 Check(revision0.Amount==300 && revision0.Note=="Initial comment" && await db.TransferRevisions.CountAsync(x=>x.TransferId==id)==2,"Editing retains immutable original snapshot");
-await Reject(()=>service.UpdateAsync(company.Id,id,1,c.Id,a.Id,200,date,null,"bob"),"Editing cannot spend the incoming side being replaced");
 try { await service.UpdateAsync(company.Id,id,0,a.Id,b.Id,10,date,null,"stale");throw new Exception("Stale edit accepted"); }
 catch(DbUpdateConcurrencyException) { Check(true,"Stale editor cannot overwrite a newer version"); }
 await Reject(()=>service.CancelAsync(other.Id,id,1,"foreign"),"Other company cannot cancel transfer");
@@ -87,6 +85,18 @@ active.Select(other.Id);
 Check(await new organaizer.Pages.Operations.Transfers.CreateModel(db,active).OnGetAsync(id) is NotFoundResult,
     "Transfer copy cannot read a different company's transfer");
 active.Select(company.Id);
+
+var overdrawn=Account("Overdrawn","USD",-100m);
+db.Accounts.Add(overdrawn);
+await db.SaveChangesAsync();
+var overdraftId=await service.CreateAsync(company.Id,overdrawn.Id,b.Id,10m,date,null,"test");
+Check(await BalanceCalculator.GetAsync(db,overdrawn.Id)==-110m,"Transfer creation allows a negative source balance");
+await service.UpdateAsync(company.Id,overdraftId,0,overdrawn.Id,b.Id,200m,date,null,"test");
+Check(await BalanceCalculator.GetAsync(db,overdrawn.Id)==-300m && await BalanceCalculator.GetAsync(db,b.Id)==250m,
+    "Transfer editing allows insufficient funds and updates both balances");
+await service.CancelAsync(company.Id,overdraftId,1,"test");
+Check(await BalanceCalculator.GetAsync(db,overdrawn.Id)==-100m && await BalanceCalculator.GetAsync(db,b.Id)==50m,
+    "Cancelling an overdraft transfer restores both balances");
 
 sealed class TestSession : ISession
 {

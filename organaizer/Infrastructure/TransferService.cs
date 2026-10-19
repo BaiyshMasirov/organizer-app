@@ -14,8 +14,6 @@ public sealed class TransferService(FinanceDbContext db)
     public async Task<Guid> CreateAsync(Guid companyId, Guid fromId, Guid toId, decimal amount, DateTime date, string? note, string actor)
     {
         var (from,to) = await ValidateAsync(companyId, fromId, toId, amount, date, note);
-        var available = await BalanceCalculator.GetAsync(db,from.Id);
-        if (available < amount) throw new ArgumentException($"Недостаточно средств на счёте «{Label(from)}»: доступно {available:N2} {from.Currency}.");
         var id=Guid.NewGuid();
         var at=Instant(date);
         var operation=new TradeOperation { Id=id, CompanyId=companyId, TypeCode=TypeCode,
@@ -38,8 +36,6 @@ public sealed class TransferService(FinanceDbContext db)
         var (operation,rows)=await LoadAsync(companyId,id,revision);
         if(operation.Status==OperationStatus.Cancelled) throw new ArgumentException("Отменённый перевод нельзя редактировать.");
         var (from,to)=await ValidateAsync(companyId,fromId,toId,amount,date,note);
-        var available=await BalanceCalculator.GetAsync(db,from.Id)-rows.Where(x=>x.AccountId==from.Id).Sum(x=>x.Amount);
-        if(available<amount) throw new ArgumentException($"Недостаточно средств на счёте «{Label(from)}»: доступно {available:N2} {from.Currency} после замены перевода.");
         var outgoing=rows.Single(x=>x.Amount<0);var incoming=rows.Single(x=>x.Amount>0);
         outgoing.AccountId=from.Id;outgoing.Amount=-amount;outgoing.Currency=from.Currency;
         incoming.AccountId=to.Id;incoming.Amount=amount;incoming.Currency=to.Currency;
