@@ -50,11 +50,8 @@ public static class ExecutiveDashboard
 
         var accounts = await db.Accounts.IgnoreQueryFilters().AsNoTracking().Include(x => x.Company).Include(x => x.FinancialInstitution)
             .Where(x => x.IsActive && x.FinancialInstitution != null && (x.FinancialInstitution.Kind == InstitutionKind.Bank || x.FinancialInstitution.Kind == InstitutionKind.Wallet)).ToListAsync();
-        var ids = accounts.Select(x => x.Id).ToList();
-        var settlements = await db.Settlements.IgnoreQueryFilters().AsNoTracking().Where(x => ids.Contains(x.AccountId) && x.Operation!.Status != OperationStatus.Cancelled).GroupBy(x => x.AccountId).Select(g => new { Id = g.Key, Amount = g.Sum(x => x.Amount) }).ToDictionaryAsync(x => x.Id, x => x.Amount);
-        var accountExpenses = await db.Expenses.IgnoreQueryFilters().AsNoTracking().Where(x => ids.Contains(x.AccountId)).GroupBy(x => x.AccountId).Select(g => new { Id = g.Key, Amount = g.Sum(x => x.Amount) }).ToDictionaryAsync(x => x.Id, x => x.Amount);
-        var movements = await db.AccountMovements.IgnoreQueryFilters().AsNoTracking().Where(x => ids.Contains(x.AccountId) && !x.IsCancelled).GroupBy(x => x.AccountId).Select(g => new { Id = g.Key, Amount = g.Sum(x => x.Amount) }).ToDictionaryAsync(x => x.Id, x => x.Amount);
-        var balances = accounts.Select(x => new AccountBalance(x.Company?.Name ?? "—", x.FinancialInstitution?.Name ?? x.Name, x.FinancialInstitution?.Kind == InstitutionKind.Bank ? "Банк" : "Кошелёк", x.Currency, x.OpeningBalance + settlements.GetValueOrDefault(x.Id) - accountExpenses.GetValueOrDefault(x.Id) + movements.GetValueOrDefault(x.Id))).OrderBy(x => x.Company).ThenBy(x => x.Account).ThenBy(x => x.Currency).ToList();
+        var accountBalances=await BalanceCalculator.GetManyAsync(db,accounts,ignoreQueryFilters:true);
+        var balances = accounts.Select(x => new AccountBalance(x.Company?.Name ?? "—", x.FinancialInstitution?.Name ?? x.Name, x.FinancialInstitution?.Kind == InstitutionKind.Bank ? "Банк" : "Кошелёк", x.Currency, accountBalances[x.Id])).OrderBy(x => x.Company).ThenBy(x => x.Account).ThenBy(x => x.Currency).ToList();
 
         var companyRows = new StringBuilder();
         foreach (var x in results) companyRows.Append($"<tr><td><b>{E(x.Company)}</b></td><td>{N(x.Profit)} USD</td><td class=neg>{N(x.Expenses)} USD</td><td class='{(x.Net < 0 ? "neg" : "pos")}'>{N(x.Net)} USD</td></tr>");

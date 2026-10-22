@@ -570,6 +570,9 @@ namespace organaizer.Infrastructure.Migrations
                         .HasPrecision(24, 8)
                         .HasColumnType("numeric(24,8)");
 
+                    b.Property<DateTimeOffset?>("OpeningBalanceAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id");
 
                     b.HasIndex("FinancialInstitutionId");

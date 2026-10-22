@@ -29,6 +29,7 @@ public sealed class MoneyAccount
     public AccountKind Kind { get; set; }
     [MaxLength(5)] public required string Currency { get; set; }
     public decimal OpeningBalance { get; set; }
+    public DateTimeOffset? OpeningBalanceAt { get; set; }
     public bool IsActive { get; set; } = true;
 }
 

@@ -15,10 +15,10 @@ public sealed class HistoryModel(FinanceDbContext db, ActiveCompany active) : Pa
     private const string AmountFormat = "#,##0.00########;[Red]-#,##0.00########;-";
 
     public sealed record HistoryRow(Guid AccountId, string Account, string Currency, DateTimeOffset OccurredAt,
-        string Type, string Description, decimal Amount, decimal Balance);
+        string Type, string Description, decimal Amount, decimal? Balance);
 
-    public sealed record PeriodSummary(Guid AccountId, string Account, string Currency, decimal Opening,
-        decimal Income, decimal Expense, decimal Closing);
+    public sealed record PeriodSummary(Guid AccountId, string Account, string Currency, decimal? Opening,
+        decimal Income, decimal Expense, decimal? Closing, DateTimeOffset? OpeningAt = null);
 
     private sealed record RawEntry(Guid AccountId, string Account, string Currency, decimal OpeningBalance,
         DateTimeOffset OccurredAt, string Type, string Description, decimal Amount);
@@ -35,6 +35,7 @@ public sealed class HistoryModel(FinanceDbContext db, ActiveCompany active) : Pa
     public List<string> Types { get; private set; } = [];
     public List<string> Currencies { get; private set; } = [];
     public bool ShowPeriodSummary => AccountId.HasValue || From.HasValue || To.HasValue;
+    public bool HasUndatedBalances => Items.Any(x=>!x.Balance.HasValue) || PeriodSummaries.Any(x=>!x.Opening.HasValue || !x.Closing.HasValue);
 
     public async Task<IActionResult> OnGetAsync() => await LoadAsync() ? Page() : NotFound();
 
@@ -59,7 +60,7 @@ public sealed class HistoryModel(FinanceDbContext db, ActiveCompany active) : Pa
         if (To.HasValue) sheet.Cells[2, 3].Style.Numberformat.Format = "dd.mm.yyyy";
         else sheet.Cells[2, 3].Value = "по текущую дату";
 
-        var summaryHeaders = new[] { "Счёт", "Валюта", "Сальдо на начало", "Приход", "Расход", "Сальдо на конец" };
+        var summaryHeaders = new[] { "Счёт", "Валюта", "Сальдо на начало", "Приход", "Расход", "Сальдо на конец", "Дата начального остатка" };
         for (var column = 1; column <= summaryHeaders.Length; column++)
             sheet.Cells[4, column].Value = summaryHeaders[column - 1];
         StyleHeader(sheet.Cells[4, 1, 4, summaryHeaders.Length]);
@@ -73,6 +74,7 @@ public sealed class HistoryModel(FinanceDbContext db, ActiveCompany active) : Pa
             SetNumberCell(sheet.Cells[summaryRow, 4], item.Income);
             SetNumberCell(sheet.Cells[summaryRow, 5], item.Expense);
             SetNumberCell(sheet.Cells[summaryRow, 6], item.Closing);
+            if(item.OpeningAt.HasValue){sheet.Cells[summaryRow,7].Value=item.OpeningAt.Value.ToOffset(AlmatyOffset).DateTime;sheet.Cells[summaryRow,7].Style.Numberformat.Format="dd.mm.yyyy";}
             summaryRow++;
         }
 
@@ -195,9 +197,10 @@ public sealed class HistoryModel(FinanceDbContext db, ActiveCompany active) : Pa
             foreach (var entry in entries.Where(x => x.AccountId == account.Id)
                          .OrderBy(x => x.OccurredAt).ThenBy(x => x.Type).ThenBy(x => x.Description))
             {
-                balance += entry.Amount;
+                var included=!account.OpeningBalanceAt.HasValue || entry.OccurredAt>=account.OpeningBalanceAt.Value;
+                if(included) balance += entry.Amount;
                 rows.Add(new HistoryRow(entry.AccountId, entry.Account, entry.Currency, entry.OccurredAt,
-                    entry.Type, entry.Description, entry.Amount, balance));
+                    entry.Type, entry.Description, entry.Amount, included?balance:null));
             }
         }
 
@@ -209,17 +212,20 @@ public sealed class HistoryModel(FinanceDbContext db, ActiveCompany active) : Pa
         foreach (var account in summaryAccounts.OrderBy(AccountLabel).ThenBy(x => x.Currency))
         {
             var accountEntries = entries.Where(x => x.AccountId == account.Id).ToList();
-            var opening = account.OpeningBalance + (fromInstant.HasValue
-                ? accountEntries.Where(x => x.OccurredAt < fromInstant.Value).Sum(x => x.Amount)
+            var balanceEntries=accountEntries.Where(x=>!account.OpeningBalanceAt.HasValue || x.OccurredAt>=account.OpeningBalanceAt.Value).ToList();
+            decimal? opening = account.OpeningBalanceAt.HasValue && (fromInstant.HasValue ? fromInstant.Value<account.OpeningBalanceAt.Value : accountEntries.Any(x=>x.OccurredAt<account.OpeningBalanceAt.Value)) ? null : account.OpeningBalance + (fromInstant.HasValue
+                ? balanceEntries.Where(x => x.OccurredAt < fromInstant.Value).Sum(x => x.Amount)
                 : 0m);
             var periodEntries = accountEntries.Where(x =>
                 (!fromInstant.HasValue || x.OccurredAt >= fromInstant.Value) &&
                 (!toInstant.HasValue || x.OccurredAt < toInstant.Value)).ToList();
             var income = periodEntries.Where(x => x.Amount > 0).Sum(x => x.Amount);
             var expense = Math.Abs(periodEntries.Where(x => x.Amount < 0).Sum(x => x.Amount));
+            decimal? closing=account.OpeningBalanceAt.HasValue && toInstant.HasValue && toInstant.Value<=account.OpeningBalanceAt.Value
+                ? null : account.OpeningBalance+balanceEntries.Where(x=>!toInstant.HasValue || x.OccurredAt<toInstant.Value).Sum(x=>x.Amount);
             if (AccountId.HasValue || periodEntries.Count > 0 || opening != 0)
                 PeriodSummaries.Add(new PeriodSummary(account.Id, AccountLabel(account), account.Currency,
-                    opening, income, expense, opening + income - expense));
+                    opening, income, expense, closing, account.OpeningBalanceAt));
         }
 
         Items = rows.Where(x =>
@@ -252,9 +258,9 @@ public sealed class HistoryModel(FinanceDbContext db, ActiveCompany active) : Pa
         range.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
     }
 
-    private static void SetNumberCell(ExcelRange cell, decimal amount)
+    private static void SetNumberCell(ExcelRange cell, decimal? amount)
     {
-        cell.Value = amount;
+        cell.Value = amount.HasValue ? (object)amount.Value : "—";
         cell.Style.Numberformat.Format = AmountFormat;
     }
 }

@@ -17,9 +17,26 @@ public static class BalanceCalculator
     public static async Task<decimal> GetAsync(FinanceDbContext db, Guid accountId, CancellationToken ct = default)
     {
         var account = await db.Accounts.AsNoTracking().SingleAsync(x => x.Id == accountId, ct);
-        var settlements = await db.Settlements.AsNoTracking().Where(x => x.AccountId == accountId && x.Operation!.Status != OperationStatus.Cancelled).SumAsync(x => x.Amount, ct);
-        var expenses = await db.Expenses.AsNoTracking().Where(x => x.AccountId == accountId).SumAsync(x => x.Amount, ct);
-        var movements = await db.AccountMovements.AsNoTracking().Where(x => x.AccountId == accountId && !x.IsCancelled).SumAsync(x => x.Amount, ct);
-        return account.OpeningBalance + settlements - expenses + movements;
+        return (await GetManyAsync(db,[account],ct))[accountId];
+    }
+
+    public static async Task<Dictionary<Guid,decimal>> GetManyAsync(FinanceDbContext db, IReadOnlyCollection<MoneyAccount> accounts,
+        CancellationToken ct=default, bool ignoreQueryFilters=false)
+    {
+        var ids=accounts.Select(x=>x.Id).ToList();
+        var aq=ignoreQueryFilters?db.Accounts.IgnoreQueryFilters():db.Accounts;
+        var sq=ignoreQueryFilters?db.Settlements.IgnoreQueryFilters():db.Settlements;
+        var eq=ignoreQueryFilters?db.Expenses.IgnoreQueryFilters():db.Expenses;
+        var mq=ignoreQueryFilters?db.AccountMovements.IgnoreQueryFilters():db.AccountMovements;
+        var settlements=await (from s in sq.AsNoTracking() join a in aq on s.AccountId equals a.Id
+            where ids.Contains(a.Id) && s.Operation!.Status!=OperationStatus.Cancelled && (!a.OpeningBalanceAt.HasValue || s.OccurredAt>=a.OpeningBalanceAt.Value)
+            group s by a.Id into g select new {Id=g.Key,Amount=g.Sum(x=>x.Amount)}).ToDictionaryAsync(x=>x.Id,x=>x.Amount,ct);
+        var expenses=await (from e in eq.AsNoTracking() join a in aq on e.AccountId equals a.Id
+            where ids.Contains(a.Id) && (!a.OpeningBalanceAt.HasValue || e.OccurredAt>=a.OpeningBalanceAt.Value)
+            group e by a.Id into g select new {Id=g.Key,Amount=g.Sum(x=>x.Amount)}).ToDictionaryAsync(x=>x.Id,x=>x.Amount,ct);
+        var movements=await (from m in mq.AsNoTracking() join a in aq on m.AccountId equals a.Id
+            where ids.Contains(a.Id) && !m.IsCancelled && (!a.OpeningBalanceAt.HasValue || m.OccurredAt>=a.OpeningBalanceAt.Value)
+            group m by a.Id into g select new {Id=g.Key,Amount=g.Sum(x=>x.Amount)}).ToDictionaryAsync(x=>x.Id,x=>x.Amount,ct);
+        return accounts.ToDictionary(x=>x.Id,x=>x.OpeningBalance+settlements.GetValueOrDefault(x.Id)-expenses.GetValueOrDefault(x.Id)+movements.GetValueOrDefault(x.Id));
     }
 }

@@ -44,6 +44,7 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
 
         [Range(typeof(decimal), "-999999999999999", "999999999999999", ErrorMessage = "Укажите корректную сумму")]
         public decimal Amount { get; set; }
+        public DateTime? OpeningDate { get; set; } = DateTimeOffset.UtcNow.ToOffset(AlmatyOffset).Date;
     }
 
     public sealed record ConversionBankOption(string Key, string Name);
@@ -66,6 +67,7 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
         Input.AccountName = Input.AccountName.Trim();
         if (await db.Accounts.AnyAsync(x => x.CompanyId == active.RequiredId && x.Name.ToLower() == Input.AccountName.ToLower() && x.Currency == Input.Currency))
             ModelState.AddModelError("Input.AccountName", "Счёт с таким названием и валютой уже существует.");
+        if(Input.OpeningDate?.Year is < 2 or > 9998) ModelState.AddModelError("Input.OpeningDate","Укажите корректную дату начального остатка.");
         if (!ModelState.IsValid) { await LoadAsync(); return Page(); }
 
         var companyId = active.RequiredId;
@@ -73,20 +75,26 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
         {
             Id = Guid.NewGuid(), CompanyId = companyId, FinancialInstitutionId = institution!.Id,
             Name = Input.AccountName, Kind = ToAccountKind(institution.Kind), Currency = Input.Currency,
-            OpeningBalance = Input.Amount
+            OpeningBalance = Input.Amount,
+            OpeningBalanceAt = Input.OpeningDate.HasValue ? MovementInstant(Input.OpeningDate.Value) : null
         });
         await db.SaveChangesAsync();
         TempData["Success"] = "Баланс добавлен";
         return RedirectToPage();
     }
 
-    public async Task<IActionResult> OnPostUpdateAsync(Guid id, decimal amount)
+    public async Task<IActionResult> OnPostUpdateAsync(Guid id, decimal amount, DateTime? openingDate)
     {
         var account = await db.Accounts.SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == active.RequiredId);
         if (account is null) return NotFound();
+        if(ModelState[nameof(amount)]?.Errors.Count>0 || ModelState[nameof(openingDate)]?.Errors.Count>0 ||
+            amount is < -999999999999999m or > 999999999999999m || openingDate?.Year is < 2 or > 9998)
+            return BalanceError("Укажите корректную сумму и дату начального остатка.");
         account.OpeningBalance = amount;
+        if(openingDate.HasValue || (Request.HasFormContentType && Request.Form.ContainsKey(nameof(openingDate))))
+            account.OpeningBalanceAt = openingDate.HasValue ? MovementInstant(openingDate.Value) : null;
         await db.SaveChangesAsync();
-        TempData["Success"] = "Сумма обновлена";
+        TempData["Success"] = "Начальный остаток и дата обновлены";
         return RedirectToPage();
     }
 
@@ -147,7 +155,7 @@ public sealed class IndexModel(FinanceDbContext db, ActiveCompany active) : Page
                 (string.IsNullOrWhiteSpace(search) || (x.FinancialInstitution?.Name ?? "").Contains(search, StringComparison.OrdinalIgnoreCase) || x.Name.Contains(search, StringComparison.OrdinalIgnoreCase)) &&
                 (string.IsNullOrWhiteSpace(Currency) || x.Currency.Equals(Currency, StringComparison.OrdinalIgnoreCase)))
             .ToList();
-        foreach (var item in AllItems) Balances[item.Id] = await BalanceCalculator.GetAsync(db, item.Id);
+        Balances = await BalanceCalculator.GetManyAsync(db,AllItems);
         var recentRows = await db.AccountMovements.AsNoTracking()
             .Include(x => x.Account).ThenInclude(x => x!.FinancialInstitution)
             .Where(x => x.CompanyId == active.RequiredId && !x.IsCancelled)

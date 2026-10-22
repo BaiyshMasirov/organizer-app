@@ -206,15 +206,9 @@ public sealed class DashboardHandler(FinanceDbContext db) : IQueryHandler<Dashbo
             profit = report.Profit;
             expense = report.Expenses;
         }
-        var accountRows = await accounts.Select(a => new { a.Id, a.Name, a.Currency, a.OpeningBalance }).ToListAsync(ct);
-        var accountIds = accountRows.Select(x => x.Id).ToList();
-        var movements = await db.Settlements.AsNoTracking().Where(x => accountIds.Contains(x.AccountId) && x.Operation!.Status != OperationStatus.Cancelled)
-            .GroupBy(x => x.AccountId).Select(g => new { Id=g.Key, Amount=g.Sum(x=>x.Amount) }).ToDictionaryAsync(x=>x.Id,x=>x.Amount,ct);
-        var expenseMovements = await db.Expenses.AsNoTracking().Where(x => accountIds.Contains(x.AccountId))
-            .GroupBy(x => x.AccountId).Select(g => new { Id=g.Key, Amount=g.Sum(x=>x.Amount) }).ToDictionaryAsync(x=>x.Id,x=>x.Amount,ct);
-        var internalMovements = await db.AccountMovements.AsNoTracking().Where(x => accountIds.Contains(x.AccountId) && !x.IsCancelled)
-            .GroupBy(x => x.AccountId).Select(g => new { Id=g.Key, Amount=g.Sum(x=>x.Amount) }).ToDictionaryAsync(x=>x.Id,x=>x.Amount,ct);
-        var balances = accountRows.Select(a => new BalanceDto(a.Name,a.Currency,a.OpeningBalance + movements.GetValueOrDefault(a.Id) - expenseMovements.GetValueOrDefault(a.Id) + internalMovements.GetValueOrDefault(a.Id))).ToList();
+        var accountRows = await accounts.ToListAsync(ct);
+        var accountBalances = await BalanceCalculator.GetManyAsync(db,accountRows,ct);
+        var balances = accountRows.Select(a => new BalanceDto(a.Name,a.Currency,accountBalances[a.Id])).ToList();
         var open = await ops.Include(x=>x.Counterparty).Where(x=>x.Status!=OperationStatus.Settled && x.Status!=OperationStatus.Cancelled)
             .OrderByDescending(x=>x.OccurredAt).Take(12).Select(x=>new OpenOperationDto(x.Id,x.OccurredAt,x.TypeCode,x.Counterparty!=null?x.Counterparty.Name:"—",$"{x.SellAmount} {x.SellCurrency} ↔ {x.BuyAmount} {x.BuyCurrency}")).ToListAsync(ct);
         return new DashboardDto(profit,expense,profit-expense,balances,open);
