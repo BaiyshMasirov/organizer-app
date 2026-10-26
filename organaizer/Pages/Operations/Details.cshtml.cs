@@ -1,10 +1,53 @@
-using Microsoft.AspNetCore.Mvc; using Microsoft.AspNetCore.Mvc.RazorPages; using Microsoft.EntityFrameworkCore; using organaizer.Application; using organaizer.Domain; using organaizer.Infrastructure;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.EntityFrameworkCore;
+using organaizer.Application;
+using organaizer.Domain;
+using organaizer.Infrastructure;
+
 namespace organaizer.Pages.Operations;
-public sealed class DetailsModel(FinanceDbContext db,Dispatcher dispatcher):PageModel
+
+public sealed class DetailsModel(FinanceDbContext db, Dispatcher dispatcher) : PageModel
 {
- public TradeOperation Operation{get;private set;}=null!;public Domain.Company Company{get;private set;}=null!;
- public async Task<IActionResult> OnGetAsync(Guid id){var operation=await db.Operations.AsNoTracking().Include(x=>x.Counterparty).Include(x=>x.Settlements).ThenInclude(x=>x.Account).ThenInclude(x=>x!.FinancialInstitution).SingleOrDefaultAsync(x=>x.Id==id);if(operation is null)return NotFound();if(operation.TypeCode==TransferService.TypeCode)return RedirectToPage("/Operations/Transfers/Details",new{id});Operation=operation;Company=await db.Companies.AsNoTracking().SingleAsync(x=>x.Id==operation.CompanyId);return Page();}
- public async Task<IActionResult> OnPostCompleteAsync(Guid id){if(await db.Operations.AnyAsync(x=>x.Id==id&&x.TypeCode==TransferService.TypeCode))return RedirectToPage("/Operations/Transfers/Details",new{id});await dispatcher.Send(new CompleteOperationCommand(id));return RedirectToPage(new{id});}
- public async Task<IActionResult> OnPostCancelAsync(Guid id){if(await db.Operations.AnyAsync(x=>x.Id==id&&x.TypeCode==TransferService.TypeCode))return RedirectToPage("/Operations/Transfers/Details",new{id});await dispatcher.Send(new CancelOperationCommand(id));return RedirectToPage("Index");}
- public async Task<IActionResult> OnPostReactivateAsync(Guid id){if(await db.Operations.AnyAsync(x=>x.Id==id&&x.TypeCode==TransferService.TypeCode))return RedirectToPage("/Operations/Transfers/Details",new{id});await dispatcher.Send(new ReactivateOperationCommand(id));return RedirectToPage(new{id});}
+    [BindProperty(SupportsGet = true)] public string? ReturnUrl { get; set; }
+    public string ReturnTarget => Url.IsLocalUrl(ReturnUrl) ? ReturnUrl! : "/Operations";
+    public TradeOperation Operation { get; private set; } = null!;
+    public Domain.Company Company { get; private set; } = null!;
+
+    public async Task<IActionResult> OnGetAsync(Guid id)
+    {
+        var operation = await db.Operations.AsNoTracking().Include(x => x.Counterparty)
+            .Include(x => x.Settlements).ThenInclude(x => x.Account).ThenInclude(x => x!.FinancialInstitution)
+            .SingleOrDefaultAsync(x => x.Id == id);
+        if (operation is null) return NotFound();
+        if (operation.TypeCode == TransferService.TypeCode)
+            return RedirectToPage("/Operations/Transfers/Details", new { id, returnUrl = ReturnUrl });
+        Operation = operation;
+        Company = await db.Companies.AsNoTracking().SingleAsync(x => x.Id == operation.CompanyId);
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostCompleteAsync(Guid id)
+    {
+        if (await db.Operations.AnyAsync(x => x.Id == id && x.TypeCode == TransferService.TypeCode))
+            return RedirectToPage("/Operations/Transfers/Details", new { id, returnUrl = ReturnUrl });
+        await dispatcher.Send(new CompleteOperationCommand(id));
+        return RedirectToPage(new { id, returnUrl = ReturnUrl });
+    }
+
+    public async Task<IActionResult> OnPostCancelAsync(Guid id)
+    {
+        if (await db.Operations.AnyAsync(x => x.Id == id && x.TypeCode == TransferService.TypeCode))
+            return RedirectToPage("/Operations/Transfers/Details", new { id, returnUrl = ReturnUrl });
+        await dispatcher.Send(new CancelOperationCommand(id));
+        return LocalRedirect(ReturnTarget);
+    }
+
+    public async Task<IActionResult> OnPostReactivateAsync(Guid id)
+    {
+        if (await db.Operations.AnyAsync(x => x.Id == id && x.TypeCode == TransferService.TypeCode))
+            return RedirectToPage("/Operations/Transfers/Details", new { id, returnUrl = ReturnUrl });
+        await dispatcher.Send(new ReactivateOperationCommand(id));
+        return RedirectToPage(new { id, returnUrl = ReturnUrl });
+    }
 }

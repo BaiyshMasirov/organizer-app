@@ -12,10 +12,10 @@
   .operation-summary h3{margin:0 0 18px;font-size:18px;color:#1d3472}
 </style>
 
-<div class="d-flex justify-content-between align-items-center mb-4"><h1 class="mb-0">Редактирование операции</h1><a asp-page="Details" asp-route-id="@Model.Input.Id" class="btn btn-light">Отмена</a></div>
+<div class="d-flex justify-content-between align-items-center mb-4"><h1 class="mb-0">Редактирование операции</h1><a asp-page="Details" asp-route-id="@Model.Input.Id" asp-route-returnUrl="@Model.ReturnUrl" class="btn btn-light">Отмена</a></div>
 
 <form method="post" class="card card-body" id="operation-form" data-aa="@Model.IsLiquidityProvider.ToString().ToLowerInvariant()">
-  <input asp-for="Input.Id" type="hidden"/><input asp-for="Input.SellCurrency" type="hidden"/><input asp-for="Input.BuyCurrency" type="hidden"/>
+  <input asp-for="ReturnUrl" type="hidden"/><input asp-for="Input.Id" type="hidden"/><input asp-for="Input.SellCurrency" type="hidden"/><input asp-for="Input.BuyCurrency" type="hidden"/>
   <div asp-validation-summary="All" class="alert alert-danger"></div>
   <div class="row g-3 mb-4">
     <div class="col-md-6"><label class="form-label">Компания</label><select asp-for="Input.CompanyId" asp-items="Model.Companies" class="form-select"></select></div>

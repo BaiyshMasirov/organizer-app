@@ -12,6 +12,8 @@ namespace organaizer.Pages.Operations;
 public sealed class EditModel(Dispatcher dispatcher, FinanceDbContext db, ActiveCompany active) : PageModel
 {
     [BindProperty] public InputModel Input { get; set; } = new();
+    [BindProperty(SupportsGet = true)] public string? ReturnUrl { get; set; }
+    public string ReturnTarget => Url.IsLocalUrl(ReturnUrl) ? ReturnUrl! : "/Operations";
     public List<SelectListItem> Companies { get; private set; } = [];
     public List<SelectListItem> Counterparties { get; private set; } = [];
     public List<SelectListItem> Currencies { get; private set; } = [];
@@ -44,7 +46,7 @@ public sealed class EditModel(Dispatcher dispatcher, FinanceDbContext db, Active
     {
         var x = await db.Operations.AsNoTracking().Include(x => x.Settlements).SingleOrDefaultAsync(x => x.Id == id);
         if (x is null) return NotFound();
-        if(x.TypeCode==TransferService.TypeCode) return RedirectToPage("/Operations/Transfers/Edit",new { id });
+        if(x.TypeCode==TransferService.TypeCode) return RedirectToPage("/Operations/Transfers/Edit",new { id, returnUrl=ReturnUrl });
         await Load();
         Input = new InputModel
         {
@@ -136,7 +138,7 @@ public sealed class EditModel(Dispatcher dispatcher, FinanceDbContext db, Active
             new DateTimeOffset(i.OccurredAt, TimeSpan.Zero), i.DueAt.HasValue ? new DateTimeOffset(i.DueAt.Value, TimeSpan.Zero) : null,
             i.SellCurrency, i.SellAmount, i.BuyCurrency, i.BuyAmount, i.FeeAmount, i.FeeCurrency,
             i.BaseCurrencyProfit, i.ExchangeRate, current.Status, sell?.Name, buy?.Name, i.Note));
-        return RedirectToPage("Details", new { id=i.Id });
+        return LocalRedirect(ReturnTarget);
     }
 
     private async Task Load()

@@ -2,9 +2,9 @@
 @model organaizer.Pages.Operations.Transfers.EditModel
 @using organaizer.Infrastructure
 @{ ViewData["Title"]="Редактирование перевода"; }
-<div class="d-flex justify-content-between mb-4"><h1>Редактирование перевода</h1><a asp-page="Details" asp-route-id="@Model.Id" class="btn btn-light">Отмена</a></div>
+<div class="d-flex justify-content-between mb-4"><h1>Редактирование перевода</h1><a asp-page="Details" asp-route-id="@Model.Id" asp-route-returnUrl="@Model.ReturnUrl" class="btn btn-light">Отмена</a></div>
 <form method="post" class="card card-body">
-  <input asp-for="Input.Revision" type="hidden" />
+  <input asp-for="ReturnUrl" type="hidden" /><input asp-for="Input.Revision" type="hidden" />
   <div asp-validation-summary="All" class="alert alert-danger"></div>
   <div class="row g-3">
     <div class="col-md-6"><label asp-for="Input.FromAccountId" class="form-label">Со счёта</label><select asp-for="Input.FromAccountId" class="form-select" required>@foreach(var a in Model.Accounts){<option value="@a.Id">@TransferService.Label(a) · @a.Currency</option>}</select></div>

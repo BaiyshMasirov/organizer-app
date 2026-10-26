@@ -9,6 +9,8 @@ namespace organaizer.Pages.Operations.Transfers;
 public sealed class EditModel(FinanceDbContext db, ActiveCompany active) : PageModel
 {
     [BindProperty] public TransferForm Input { get; set; } = new();
+    [BindProperty(SupportsGet = true)] public string? ReturnUrl { get; set; }
+    public string ReturnTarget => Url.IsLocalUrl(ReturnUrl) ? ReturnUrl! : "/Operations";
     public Guid Id { get; private set; }
     public List<MoneyAccount> Accounts { get; private set; } = [];
     public async Task<IActionResult> OnGetAsync(Guid id)
@@ -16,7 +18,7 @@ public sealed class EditModel(FinanceDbContext db, ActiveCompany active) : PageM
         Id=id;
         var operation=await db.Operations.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==id && x.CompanyId==active.RequiredId && x.TypeCode==TransferService.TypeCode);
         if(operation is null) return NotFound();
-        if(operation.Status==OperationStatus.Cancelled) return RedirectToPage("Details",new { id });
+        if(operation.Status==OperationStatus.Cancelled) return RedirectToPage("Details",new { id, returnUrl=ReturnUrl });
         var rows=await db.AccountMovements.AsNoTracking().Where(x=>x.CompanyId==active.RequiredId && x.GroupId==id).ToListAsync();
         if(rows.Count!=2 || rows.Count(x=>x.Amount<0)!=1 || rows.Count(x=>x.Amount>0)!=1) return BadRequest();
         Input=new TransferForm { FromAccountId=rows.Single(x=>x.Amount<0).AccountId,ToAccountId=rows.Single(x=>x.Amount>0).AccountId,
@@ -35,7 +37,7 @@ public sealed class EditModel(FinanceDbContext db, ActiveCompany active) : PageM
                 await new TransferService(db).UpdateAsync(active.RequiredId,id,Input.Revision,Input.FromAccountId,Input.ToAccountId,
                     Input.Amount,Input.OccurredAt,Input.Note,User.Identity?.Name??"system");
                 TempData["Message"]="Перевод изменён, остатки пересчитаны";
-                return RedirectToPage("Details",new { id });
+                return LocalRedirect(ReturnTarget);
             }
             catch(ArgumentException ex) { ModelState.AddModelError("",ex.Message); }
             catch(DbUpdateException) { ModelState.AddModelError("","Перевод уже изменён. Обновите страницу перед сохранением."); }

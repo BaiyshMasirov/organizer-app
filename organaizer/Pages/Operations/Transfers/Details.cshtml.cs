@@ -8,6 +8,8 @@ namespace organaizer.Pages.Operations.Transfers;
 
 public sealed class DetailsModel(FinanceDbContext db, ActiveCompany active) : PageModel
 {
+    [BindProperty(SupportsGet = true)] public string? ReturnUrl { get; set; }
+    public string ReturnTarget => Url.IsLocalUrl(ReturnUrl) ? ReturnUrl! : "/Operations";
     public TradeOperation Transfer { get; private set; } = null!;
     public int Revision { get; private set; }
     public List<TransferRevision> History { get; private set; } = [];
@@ -26,6 +28,6 @@ public sealed class DetailsModel(FinanceDbContext db, ActiveCompany active) : Pa
         try { await new TransferService(db).CancelAsync(active.RequiredId,id,revision,User.Identity?.Name??"system");TempData["Message"]="Перевод отменён. Его влияние на остатки убрано."; }
         catch(ArgumentException ex) { TempData["TransferError"]=ex.Message; }
         catch(DbUpdateException) { TempData["TransferError"]="Перевод уже изменён. Обновите страницу."; }
-        return RedirectToPage(new { id });
+        return RedirectToPage(new { id, returnUrl=ReturnUrl });
     }
 }
