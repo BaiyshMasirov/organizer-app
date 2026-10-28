@@ -35,10 +35,10 @@ Check(september.Items.First().Balance==1572.59m && september.Items.Last().Balanc
 var augustHistory=new HistoryModel(db,active){AccountId=bank.Id,From=new DateTime(2026,8,1),To=new DateTime(2026,8,31)};
 await augustHistory.OnGetAsync();
 Check(augustHistory.Items.Count==3 && augustHistory.Items.All(x=>x.Balance is null),"August transactions remain visible without fabricated balances");
-Check(augustHistory.PeriodSummaries.Single().Opening is null && augustHistory.PeriodSummaries.Single().Closing is null,"August does not reuse September's initial balance");
+Check(augustHistory.PeriodSummaries.Single().Opening is null && augustHistory.PeriodSummaries.Single().Closing is null && augustHistory.PeriodSummaries.Single().Income==0 && augustHistory.PeriodSummaries.Single().Expense==0,"August does not reuse September's initial balance or affect period turnover");
 var cross=new HistoryModel(db,active){AccountId=bank.Id,From=new DateTime(2026,8,1),To=new DateTime(2026,9,30)};
 await cross.OnGetAsync();
-Check(cross.PeriodSummaries.Single().Opening is null && cross.PeriodSummaries.Single().Closing==1742.59m,"A period spanning the opening date ends at the correct balance");
+Check(cross.PeriodSummaries.Single().Opening is null && cross.PeriodSummaries.Single().Income==300m && cross.PeriodSummaries.Single().Expense==30m && cross.PeriodSummaries.Single().Closing==1742.59m,"A period spanning the opening date excludes earlier turnover and ends at the correct balance");
 var october=new HistoryModel(db,active){AccountId=bank.Id,From=new DateTime(2026,10,1),To=new DateTime(2026,10,31)};
 await october.OnGetAsync();
 Check(october.PeriodSummaries.Single().Opening==1742.59m,"Later periods carry forward only post-opening movements");

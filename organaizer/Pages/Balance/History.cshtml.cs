@@ -216,7 +216,7 @@ public sealed class HistoryModel(FinanceDbContext db, ActiveCompany active) : Pa
             decimal? opening = account.OpeningBalanceAt.HasValue && (fromInstant.HasValue ? fromInstant.Value<account.OpeningBalanceAt.Value : accountEntries.Any(x=>x.OccurredAt<account.OpeningBalanceAt.Value)) ? null : account.OpeningBalance + (fromInstant.HasValue
                 ? balanceEntries.Where(x => x.OccurredAt < fromInstant.Value).Sum(x => x.Amount)
                 : 0m);
-            var periodEntries = accountEntries.Where(x =>
+            var periodEntries = balanceEntries.Where(x =>
                 (!fromInstant.HasValue || x.OccurredAt >= fromInstant.Value) &&
                 (!toInstant.HasValue || x.OccurredAt < toInstant.Value)).ToList();
             var income = periodEntries.Where(x => x.Amount > 0).Sum(x => x.Amount);
