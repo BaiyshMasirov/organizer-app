@@ -60,8 +60,9 @@ Check(await db.Expenses.CountAsync()==1,"Invalid expense does not save");
 var altyn = new Counterparty { Id=Guid.NewGuid(), CompanyId=company.Id, Name="Алтын брокер" };
 var altSpot = new Counterparty { Id=Guid.NewGuid(), CompanyId=company.Id, Name="Альт Спот" };
 db.AddRange(altyn,altSpot);
+var nextOperationNumber=100L;
 TradeOperation Operation(Guid id, Counterparty client, DateTimeOffset created) => new() {
-    Id=id, CompanyId=company.Id, CounterpartyId=client.Id, TypeCode="test",
+    Id=id, OperationNumber=++nextOperationNumber, CompanyId=company.Id, CounterpartyId=client.Id, TypeCode="test",
     OccurredAt=from, CreatedAt=created, SellCurrency="USD", BuyCurrency="RUB",
     SellAmount=100, BuyAmount=8750, Note="Алтын — комментарий к чужому клиенту"
 };
@@ -78,13 +79,15 @@ await operationsPage.OnGetAsync("алтын",null,null,null,null,null,"dateAsc")
 Check(operationsPage.Items.Select(x=>x.Id).SequenceEqual(new[]{older.Id,newer.Id}),"Ascending order preserves creation chronology");
 await operationsPage.OnGetAsync("RUB",null,null,null,null,null,null);
 Check(operationsPage.TotalCount==3,"Currency search remains available");
+await operationsPage.OnGetAsync(newer.OperationNumber.ToString(),null,null,null,null,null,null);
+Check(operationsPage.TotalCount==1 && operationsPage.Items.Single().Id==newer.Id,"Operation number finds the exact database record");
 older.Status=OperationStatus.Cancelled;
 await db.SaveChangesAsync();
 var operationsExport=(FileContentResult)await operationsPage.OnGetExportAsync(null,null,null,null,null,null);
 using(var operationsPackage=new ExcelPackage(new MemoryStream(operationsExport.FileContents)))
 {
     var sheet=operationsPackage.Workbook.Worksheets[0];
-    Check(sheet.Cells[1,1].Text=="№ п/п" && sheet.Cells[2,1].GetValue<int>()==1,"Operations export contains row numbering");
+    Check(sheet.Cells[1,1].Text=="№ операции" && sheet.Cells[2,1].GetValue<long>()==unrelated.OperationNumber,"Operations export contains the permanent database number");
     Check(sheet.Dimension.Rows==3,"Cancelled operation is excluded from Excel export");
     Check(sheet.Cells[1,5].Text=="Валюта отдаём" && sheet.Cells[1,8].Text=="Валюта получаем" && sheet.Cells[1,12].Text=="Валюта прибыли","Operations export separates currency into filterable columns");
     Check(sheet.Cells[2,4].Value is not string && !sheet.Cells[2,4].Style.Numberformat.Format.Contains("USD"),"Operations export keeps amounts numeric without currency text");

@@ -14,7 +14,7 @@
 
 <form method="get" class="card card-body mb-4">
     <div class="row g-3">
-        <div class="col-lg-4"><label class="form-label">Поиск</label><input name="search" value="@Model.Search" class="form-control" placeholder="Клиент, валюта или счёт перевода"></div>
+        <div class="col-lg-4"><label class="form-label">Поиск</label><input name="search" value="@Model.Search" class="form-control" placeholder="№ операции, клиент, валюта или счёт"></div>
         <div class="col-lg-2 col-md-4"><label class="form-label">Компания</label><select name="companyId" class="form-select"><option value="">Все компании</option>@foreach(var c in Model.Companies){<option value="@c.Id" selected="@(Model.CompanyId==c.Id)">@c.Name</option>}</select></div>
         <div class="col-lg-3 col-md-4"><label class="form-label">Тип операции</label><select name="typeCode" class="form-select"><option value="">Все типы</option><option value="@TransferService.TypeCode" selected="@(Model.TypeCode==TransferService.TypeCode)">@TransferService.Title</option>@foreach(var t in OperationTypes.All){<option value="@t.Key" selected="@(Model.TypeCode==t.Key)">@t.Value</option>}</select></div>
         <div class="col-lg-3 col-md-4"><label class="form-label">Статус</label><select name="status" class="form-select"><option value="">Все статусы</option><option value="created" selected="@(Model.Status=="created")">Создана</option><option value="completed" selected="@(Model.Status=="completed")">Завершена</option><option value="cancelled" selected="@(Model.Status=="cancelled")">Отменена</option></select></div>
@@ -27,8 +27,9 @@
 
 <div class="card">
     <div class="card-header"><span>Найдено операций</span><span class="badge bg-blue-lt ms-2">@Model.TotalCount</span><span class="text-secondary ms-auto">Страница @Model.PageNumber из @Model.TotalPages</span></div>
-    <div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>Дата</th><th>Тип / клиент</th><th>Отдаем</th><th>Получаем</th><th>Курс<br><span class="text-secondary">Деньги / товар</span></th><th>Прибыль</th><th>Статус</th><th></th></tr></thead><tbody>
+    <div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>№</th><th>Дата</th><th>Тип / клиент</th><th>Отдаем</th><th>Получаем</th><th>Курс<br><span class="text-secondary">Деньги / товар</span></th><th>Прибыль</th><th>Статус</th><th></th></tr></thead><tbody>
     @foreach(var x in Model.Items){var transfer=x.TypeCode==TransferService.TypeCode;<tr>
+        <td class="text-nowrap fw-bold">@x.OperationNumber</td>
         <td class="text-nowrap">@organaizer.Pages.Operations.IndexModel.DisplayDate(x).ToString("dd.MM.yyyy")</td>
         <td><strong>@organaizer.Pages.Operations.IndexModel.TypeName(x.TypeCode)</strong><div class="small text-secondary">@(transfer?x.Note:x.Counterparty?.Name??"Без клиента")</div></td>
         <td class="text-nowrap">@x.SellAmount.ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("ru-RU")) <span class="text-secondary">@x.SellCurrency</span><div class="small text-secondary">из: @(x.SourceAccount??"—")</div></td>
@@ -40,7 +41,7 @@
         <td class="text-end text-nowrap"><a asp-page="Details" asp-route-id="@x.Id" asp-route-returnUrl="@returnUrl" class="btn btn-sm btn-icon btn-ghost-secondary" title="Просмотр">◉</a>@if(await Permissions.HasAsync(User,organaizer.Infrastructure.AppPermissions.Operations.Create)){<a asp-page="Create" asp-route-copyFrom="@x.Id" class="btn btn-sm btn-icon btn-ghost-secondary" title="Копировать в новую операцию">⧉</a>}@if(await Permissions.HasAsync(User,organaizer.Infrastructure.AppPermissions.Operations.Edit)){<a asp-page="Edit" asp-route-id="@x.Id" asp-route-returnUrl="@returnUrl" class="btn btn-sm btn-icon btn-ghost-primary" title="Изменить">✎</a>@if(x.Status==OperationStatus.Cancelled){<form method="post" asp-page-handler="Reactivate" asp-route-id="@x.Id" class="d-inline" onsubmit="return confirm('Восстановить отменённую операцию?');"><button class="btn btn-sm btn-icon btn-ghost-warning">↻</button></form>}@if(x.Status!=OperationStatus.Settled&&x.Status!=OperationStatus.Cancelled){<form method="post" asp-page-handler="Complete" asp-route-id="@x.Id" class="d-inline" onsubmit="return confirm('Подтвердить завершение операции?');"><button class="btn btn-sm btn-icon btn-ghost-success">✓</button></form>}@if(x.Status!=OperationStatus.Cancelled){<form method="post" asp-page-handler="Cancel" asp-route-id="@x.Id" class="d-inline" onsubmit="return confirm('Отменить операцию?');"><button class="btn btn-sm btn-icon btn-ghost-danger">✕</button></form>}}</td>
         }
     </tr>}
-    @if(Model.Items.Count==0){<tr><td colspan="8" class="text-center text-secondary py-5">По заданным условиям операций не найдено</td></tr>}
+    @if(Model.Items.Count==0){<tr><td colspan="9" class="text-center text-secondary py-5">По заданным условиям операций не найдено</td></tr>}
     </tbody></table></div>
 </div>
 

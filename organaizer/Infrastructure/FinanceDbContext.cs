@@ -29,6 +29,7 @@ public sealed class FinanceDbContext(DbContextOptions<FinanceDbContext> options,
     protected override void OnModelCreating(ModelBuilder b)
     {
         base.OnModelCreating(b);
+        b.HasSequence<long>("OperationNumberSequence");
         foreach (var type in b.Model.GetEntityTypes())
             foreach (var p in type.GetProperties().Where(x => x.ClrType == typeof(decimal)))
             {
@@ -49,6 +50,10 @@ public sealed class FinanceDbContext(DbContextOptions<FinanceDbContext> options,
         b.Entity<AccountMovement>().HasIndex(x => x.GroupId);
         b.Entity<Settlement>().HasIndex(x => new { x.AccountId, x.OccurredAt });
         b.Entity<TradeOperation>().HasIndex(x => new { x.CompanyId, x.OccurredAt });
+        b.Entity<TradeOperation>().HasIndex(x => x.OperationNumber).IsUnique();
+        b.Entity<TradeOperation>().Property(x => x.OperationNumber)
+            .HasDefaultValueSql("nextval('\"OperationNumberSequence\"')")
+            .ValueGeneratedOnAdd();
         b.Entity<Counterparty>().HasOne<Counterparty>().WithMany().HasForeignKey(x => x.AgentId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<Counterparty>().HasIndex(x => new { x.CompanyId, x.Name }).IsUnique();
         b.Entity<TradeOperation>().HasIndex(x => x.ImportKey).IsUnique();

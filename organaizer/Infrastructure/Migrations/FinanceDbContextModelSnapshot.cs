@@ -22,6 +22,8 @@ namespace organaizer.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.HasSequence("OperationNumberSequence");
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
                     b.Property<string>("Id")
@@ -924,6 +926,11 @@ namespace organaizer.Infrastructure.Migrations
                     b.Property<DateTimeOffset>("OccurredAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<long>("OperationNumber")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValueSql("nextval('\"OperationNumberSequence\"')");
+
                     b.Property<decimal>("SellAmount")
                         .HasPrecision(24, 8)
                         .HasColumnType("numeric(24,8)");
@@ -950,6 +957,9 @@ namespace organaizer.Infrastructure.Migrations
                     b.HasIndex("CounterpartyId");
 
                     b.HasIndex("ImportKey")
+                        .IsUnique();
+
+                    b.HasIndex("OperationNumber")
                         .IsUnique();
 
                     b.HasIndex("CompanyId", "OccurredAt");

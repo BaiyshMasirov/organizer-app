@@ -59,7 +59,7 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
         var sheet = package.Workbook.Worksheets.Add("Операции");
         var headers = new[]
         {
-            "№ п/п", "Дата", "Тип / клиент", "Отдаём", "Валюта отдаём", "Откуда отправляем",
+            "№ операции", "Дата", "Тип / клиент", "Отдаём", "Валюта отдаём", "Откуда отправляем",
             "Получаем", "Валюта получаем", "Куда получаем", "Курс (деньги / товар)", "Прибыль", "Валюта прибыли"
         };
         for (var column = 1; column <= headers.Length; column++) sheet.Cells[1, column].Value = headers[column - 1];
@@ -68,7 +68,7 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
         {
             var row = index + 2;
             var operation = items[index];
-            sheet.Cells[row, 1].Value = index + 1;
+            sheet.Cells[row, 1].Value = operation.OperationNumber;
             sheet.Cells[row, 2].Value = DisplayDate(operation).DateTime;
             sheet.Cells[row, 2].Style.Numberformat.Format = "dd.mm.yyyy";
             var transfer=operation.TypeCode==TransferService.TypeCode;
@@ -158,7 +158,9 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.ToLowerInvariant();
+            var hasOperationNumber = long.TryParse(term, out var operationNumber);
             query = query.Where(x =>
+                (hasOperationNumber && x.OperationNumber == operationNumber) ||
                 (x.Counterparty != null && x.Counterparty.Name.ToLower().Contains(term)) ||
                 x.SellCurrency.ToLower().Contains(term) ||
                 x.BuyCurrency.ToLower().Contains(term) ||

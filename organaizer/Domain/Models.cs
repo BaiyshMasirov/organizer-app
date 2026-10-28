@@ -69,6 +69,7 @@ public sealed class FinancialInstitution
 public sealed class TradeOperation
 {
     public Guid Id { get; set; }
+    public long OperationNumber { get; set; }
     public Guid CompanyId { get; set; }
     public Guid? CounterpartyId { get; set; }
     public Counterparty? Counterparty { get; set; }

@@ -28,7 +28,7 @@ public static class HistoricalDataImporter
         {
             var company=companies[item.CompanyKind];var client=FindOrCreateClient(db,clientCache,company.Id,item.Counterparty);
             refreshing.TryGetValue(item.SourceKey,out var current);
-            var imported=new TradeOperation{Id=current?.Id??Guid.NewGuid(),CreatedAt=current?.CreatedAt,CompanyId=company.Id,CounterpartyId=client?.Id,TypeCode=item.TypeCode,OccurredAt=item.OccurredAt,DueAt=null,SellCurrency=item.SellCurrency,SellAmount=item.SellAmount,BuyCurrency=item.BuyCurrency,BuyAmount=item.BuyAmount,FeeAmount=item.FeeAmount,FeeCurrency=item.FeeCurrency,BaseCurrencyProfit=item.BaseCurrencyProfit,Status=OperationStatus.Settled,Note=item.Note,ExchangeRate=item.ExchangeRate,SourceAccount=item.SourceAccount,DestinationAccount=item.DestinationAccount,ImportKey=item.SourceKey};
+            var imported=new TradeOperation{Id=current?.Id??Guid.NewGuid(),OperationNumber=current?.OperationNumber??0,CreatedAt=current?.CreatedAt,CompanyId=company.Id,CounterpartyId=client?.Id,TypeCode=item.TypeCode,OccurredAt=item.OccurredAt,DueAt=null,SellCurrency=item.SellCurrency,SellAmount=item.SellAmount,BuyCurrency=item.BuyCurrency,BuyAmount=item.BuyAmount,FeeAmount=item.FeeAmount,FeeCurrency=item.FeeCurrency,BaseCurrencyProfit=item.BaseCurrencyProfit,Status=OperationStatus.Settled,Note=item.Note,ExchangeRate=item.ExchangeRate,SourceAccount=item.SourceAccount,DestinationAccount=item.DestinationAccount,ImportKey=item.SourceKey};
             if(current is null) db.Operations.Add(imported);else db.Entry(current).CurrentValues.SetValues(imported);
         }
         await db.SaveChangesAsync();
