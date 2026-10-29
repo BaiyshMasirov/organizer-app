@@ -2,7 +2,7 @@
 @model organaizer.Pages.Operations.IndexModel
 @using organaizer.Domain
 @using organaizer.Infrastructure
-@{ ViewData["Title"] = "Операции"; var returnUrl=(Request.Path+Request.QueryString).ToString(); }
+@{ ViewData["Title"] = "Операции"; var returnUrl=(Request.Path+Request.QueryString).ToString();var canEdit=await Permissions.HasAsync(User,AppPermissions.Operations.Edit);var canBulkComplete=canEdit&&Model.Items.Any(x=>x.TypeCode!=TransferService.TypeCode&&x.Status!=OperationStatus.Settled&&x.Status!=OperationStatus.Cancelled); }
 <style>.table td .btn-icon{width:2.5rem;height:2.5rem;font-size:1.25rem}.table td form{vertical-align:middle}</style>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -12,12 +12,21 @@
 
 @if (TempData["Message"] is string message) { <div class="alert alert-success">@message</div> }
 
+@if(canBulkComplete){<form id="bulkCompleteForm" method="post" asp-page-handler="CompleteSelected" class="d-flex align-items-center gap-3 mb-3" onsubmit="return confirm('Завершить выбранные операции?');">
+    <input type="hidden" name="search" value="@Model.Search"/><input type="hidden" name="companyId" value="@Model.CompanyId"/>
+    <input type="hidden" name="typeCode" value="@Model.TypeCode"/><input type="hidden" name="status" value="@Model.Status"/>
+    <input type="hidden" name="from" value="@Model.From?.ToString("yyyy-MM-dd")"/><input type="hidden" name="to" value="@Model.To?.ToString("yyyy-MM-dd")"/>
+    <input type="hidden" name="sort" value="@Model.Sort"/><input type="hidden" name="pageNumber" value="@Model.PageNumber"/>
+    <button id="completeSelectedButton" class="btn btn-success" disabled>✓ Завершить выбранные</button>
+    <span id="selectedOperationsCount" class="text-secondary">Выбрано: 0</span>
+</form>}
+
 <form method="get" class="card card-body mb-4">
     <div class="row g-3">
         <div class="col-lg-4"><label class="form-label">Поиск</label><input name="search" value="@Model.Search" class="form-control" placeholder="№ операции, клиент, валюта или счёт"></div>
         <div class="col-lg-2 col-md-4"><label class="form-label">Компания</label><select name="companyId" class="form-select"><option value="">Все компании</option>@foreach(var c in Model.Companies){<option value="@c.Id" selected="@(Model.CompanyId==c.Id)">@c.Name</option>}</select></div>
         <div class="col-lg-3 col-md-4"><label class="form-label">Тип операции</label><select name="typeCode" class="form-select"><option value="">Все типы</option><option value="@TransferService.TypeCode" selected="@(Model.TypeCode==TransferService.TypeCode)">@TransferService.Title</option>@foreach(var t in OperationTypes.All){<option value="@t.Key" selected="@(Model.TypeCode==t.Key)">@t.Value</option>}</select></div>
-        <div class="col-lg-3 col-md-4"><label class="form-label">Статус</label><select name="status" class="form-select"><option value="">Все статусы</option><option value="created" selected="@(Model.Status=="created")">Создана</option><option value="completed" selected="@(Model.Status=="completed")">Завершена</option><option value="cancelled" selected="@(Model.Status=="cancelled")">Отменена</option></select></div>
+        <div class="col-lg-3 col-md-4"><label class="form-label">Статус</label><select name="status" class="form-select"><option value="">Все статусы</option><option value="created" selected="@(Model.Status=="created")">Незавершённые</option><option value="completed" selected="@(Model.Status=="completed")">Завершённые</option><option value="cancelled" selected="@(Model.Status=="cancelled")">Отменённые</option></select></div>
         <div class="col-md-3"><label class="form-label">Дата от</label><input name="from" value="@Model.From?.ToString("yyyy-MM-dd")" type="date" class="form-control"></div>
         <div class="col-md-3"><label class="form-label">Дата до</label><input name="to" value="@Model.To?.ToString("yyyy-MM-dd")" type="date" class="form-control"></div>
         <div class="col-md-3"><label class="form-label">Сортировка по дате</label><select name="sort" class="form-select"><option value="@organaizer.Pages.Operations.IndexModel.DateDescending" selected="@(Model.Sort==organaizer.Pages.Operations.IndexModel.DateDescending)">Сначала новые</option><option value="@organaizer.Pages.Operations.IndexModel.DateAscending" selected="@(Model.Sort==organaizer.Pages.Operations.IndexModel.DateAscending)">Сначала старые</option></select></div>
@@ -27,8 +36,9 @@
 
 <div class="card">
     <div class="card-header"><span>Найдено операций</span><span class="badge bg-blue-lt ms-2">@Model.TotalCount</span><span class="text-secondary ms-auto">Страница @Model.PageNumber из @Model.TotalPages</span></div>
-    <div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>№</th><th>Дата</th><th>Тип / клиент</th><th>Отдаем</th><th>Получаем</th><th>Курс<br><span class="text-secondary">Деньги / товар</span></th><th>Прибыль</th><th>Статус</th><th></th></tr></thead><tbody>
+    <div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr>@if(canBulkComplete){<th style="width:3rem"><input id="selectAllOperations" type="checkbox" class="form-check-input" title="Выбрать все незавершённые операции на странице"/></th>}<th>№</th><th>Дата</th><th>Тип / клиент</th><th>Отдаем</th><th>Получаем</th><th>Курс<br><span class="text-secondary">Деньги / товар</span></th><th>Прибыль</th><th>Статус</th><th></th></tr></thead><tbody>
     @foreach(var x in Model.Items){var transfer=x.TypeCode==TransferService.TypeCode;<tr>
+        @if(canBulkComplete){<td>@if(!transfer&&x.Status!=OperationStatus.Settled&&x.Status!=OperationStatus.Cancelled){<input type="checkbox" class="form-check-input operation-selector" name="selectedIds" value="@x.Id" form="bulkCompleteForm" aria-label="Выбрать операцию №@x.OperationNumber"/>}</td>}
         <td class="text-nowrap fw-bold">@x.OperationNumber</td>
         <td class="text-nowrap">@organaizer.Pages.Operations.IndexModel.DisplayDate(x).ToString("dd.MM.yyyy")</td>
         <td><strong>@organaizer.Pages.Operations.IndexModel.TypeName(x.TypeCode)</strong><div class="small text-secondary">@(transfer?x.Note:x.Counterparty?.Name??"Без клиента")</div></td>
@@ -37,11 +47,11 @@
         <td class="text-nowrap">@{var canonicalRate=transfer?null:OperationTypes.CanonicalRate(x.TypeCode,x.SellCurrency,x.SellAmount,x.BuyCurrency,x.BuyAmount);}@if(canonicalRate.HasValue){<span>@canonicalRate.Value.ToString("N8", System.Globalization.CultureInfo.GetCultureInfo("ru-RU"))</span><div class="small text-secondary">@OperationTypes.RateLabel(x.TypeCode)</div>}else{<span>—</span>}</td>
         <td class="text-nowrap @(x.BaseCurrencyProfit<0?"text-danger":"text-success")">@(transfer?"—":x.BaseCurrencyProfit.ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("ru-RU"))+" USD")</td>
         <td><span class="badge @(x.Status==OperationStatus.Cancelled?"bg-secondary-lt":x.Status==OperationStatus.Settled?"bg-green-lt":"bg-blue-lt")">@OperationStatuses.Label(x.Status)</span></td>
-        @if(transfer){<td class="text-end text-nowrap"><a asp-page="/Operations/Transfers/Details" asp-route-id="@x.Id" asp-route-returnUrl="@returnUrl" class="btn btn-sm btn-ghost-secondary">Открыть</a>@if(await Permissions.HasAsync(User,AppPermissions.Operations.Create)){<a asp-page="/Operations/Transfers/Create" asp-route-copyFrom="@x.Id" class="btn btn-sm btn-ghost-secondary" title="Копировать в новый перевод">Копировать</a>}@if(x.Status!=OperationStatus.Cancelled && await Permissions.HasAsync(User,AppPermissions.Operations.Edit)){<a asp-page="/Operations/Transfers/Edit" asp-route-id="@x.Id" asp-route-returnUrl="@returnUrl" class="btn btn-sm btn-ghost-primary">Редактировать</a>}</td>}else{
-        <td class="text-end text-nowrap"><a asp-page="Details" asp-route-id="@x.Id" asp-route-returnUrl="@returnUrl" class="btn btn-sm btn-icon btn-ghost-secondary" title="Просмотр">◉</a>@if(await Permissions.HasAsync(User,organaizer.Infrastructure.AppPermissions.Operations.Create)){<a asp-page="Create" asp-route-copyFrom="@x.Id" class="btn btn-sm btn-icon btn-ghost-secondary" title="Копировать в новую операцию">⧉</a>}@if(await Permissions.HasAsync(User,organaizer.Infrastructure.AppPermissions.Operations.Edit)){<a asp-page="Edit" asp-route-id="@x.Id" asp-route-returnUrl="@returnUrl" class="btn btn-sm btn-icon btn-ghost-primary" title="Изменить">✎</a>@if(x.Status==OperationStatus.Cancelled){<form method="post" asp-page-handler="Reactivate" asp-route-id="@x.Id" class="d-inline" onsubmit="return confirm('Восстановить отменённую операцию?');"><button class="btn btn-sm btn-icon btn-ghost-warning">↻</button></form>}@if(x.Status!=OperationStatus.Settled&&x.Status!=OperationStatus.Cancelled){<form method="post" asp-page-handler="Complete" asp-route-id="@x.Id" class="d-inline" onsubmit="return confirm('Подтвердить завершение операции?');"><button class="btn btn-sm btn-icon btn-ghost-success">✓</button></form>}@if(x.Status!=OperationStatus.Cancelled){<form method="post" asp-page-handler="Cancel" asp-route-id="@x.Id" class="d-inline" onsubmit="return confirm('Отменить операцию?');"><button class="btn btn-sm btn-icon btn-ghost-danger">✕</button></form>}}</td>
+        @if(transfer){<td class="text-end text-nowrap"><a asp-page="/Operations/Transfers/Details" asp-route-id="@x.Id" asp-route-returnUrl="@returnUrl" class="btn btn-sm btn-ghost-secondary">Открыть</a>@if(await Permissions.HasAsync(User,AppPermissions.Operations.Create)){<a asp-page="/Operations/Transfers/Create" asp-route-copyFrom="@x.Id" class="btn btn-sm btn-ghost-secondary" title="Копировать в новый перевод">Копировать</a>}@if(x.Status!=OperationStatus.Cancelled && canEdit){<a asp-page="/Operations/Transfers/Edit" asp-route-id="@x.Id" asp-route-returnUrl="@returnUrl" class="btn btn-sm btn-ghost-primary">Редактировать</a>}</td>}else{
+        <td class="text-end text-nowrap"><a asp-page="Details" asp-route-id="@x.Id" asp-route-returnUrl="@returnUrl" class="btn btn-sm btn-icon btn-ghost-secondary" title="Просмотр">◉</a>@if(await Permissions.HasAsync(User,organaizer.Infrastructure.AppPermissions.Operations.Create)){<a asp-page="Create" asp-route-copyFrom="@x.Id" class="btn btn-sm btn-icon btn-ghost-secondary" title="Копировать в новую операцию">⧉</a>}@if(canEdit){<a asp-page="Edit" asp-route-id="@x.Id" asp-route-returnUrl="@returnUrl" class="btn btn-sm btn-icon btn-ghost-primary" title="Изменить">✎</a>@if(x.Status==OperationStatus.Cancelled){<form method="post" asp-page-handler="Reactivate" asp-route-id="@x.Id" class="d-inline" onsubmit="return confirm('Восстановить отменённую операцию?');"><button class="btn btn-sm btn-icon btn-ghost-warning">↻</button></form>}@if(x.Status!=OperationStatus.Settled&&x.Status!=OperationStatus.Cancelled){<form method="post" asp-page-handler="Complete" asp-route-id="@x.Id" class="d-inline" onsubmit="return confirm('Подтвердить завершение операции?');"><button class="btn btn-sm btn-icon btn-ghost-success">✓</button></form>}@if(x.Status!=OperationStatus.Cancelled){<form method="post" asp-page-handler="Cancel" asp-route-id="@x.Id" class="d-inline" onsubmit="return confirm('Отменить операцию?');"><button class="btn btn-sm btn-icon btn-ghost-danger">✕</button></form>}}</td>
         }
     </tr>}
-    @if(Model.Items.Count==0){<tr><td colspan="9" class="text-center text-secondary py-5">По заданным условиям операций не найдено</td></tr>}
+    @if(Model.Items.Count==0){<tr><td colspan="@(canBulkComplete?10:9)" class="text-center text-secondary py-5">По заданным условиям операций не найдено</td></tr>}
     </tbody></table></div>
 </div>
 
@@ -52,3 +62,16 @@
     <li class="page-item @(Model.PageNumber==Model.TotalPages?"disabled":"")"><a class="page-link" asp-route-search="@Model.Search" asp-route-companyId="@Model.CompanyId" asp-route-typeCode="@Model.TypeCode" asp-route-status="@Model.Status" asp-route-from="@Model.From?.ToString("yyyy-MM-dd")" asp-route-to="@Model.To?.ToString("yyyy-MM-dd")" asp-route-sort="@Model.Sort" asp-route-pageNumber="@(Model.PageNumber+1)">Вперед</a></li>
     <li class="page-item @(Model.PageNumber==Model.TotalPages?"disabled":"")"><a class="page-link" asp-route-search="@Model.Search" asp-route-companyId="@Model.CompanyId" asp-route-typeCode="@Model.TypeCode" asp-route-status="@Model.Status" asp-route-from="@Model.From?.ToString("yyyy-MM-dd")" asp-route-to="@Model.To?.ToString("yyyy-MM-dd")" asp-route-sort="@Model.Sort" asp-route-pageNumber="@Model.TotalPages">В конец</a></li>
 </ul></nav>}
+
+@if(canBulkComplete){<script>
+document.addEventListener('DOMContentLoaded',()=>{
+    const selectors=[...document.querySelectorAll('.operation-selector')];
+    const selectAll=document.getElementById('selectAllOperations');
+    const button=document.getElementById('completeSelectedButton');
+    const count=document.getElementById('selectedOperationsCount');
+    const update=()=>{const selected=selectors.filter(x=>x.checked).length;button.disabled=selected===0;count.textContent=`Выбрано: ${selected}`;if(selectAll){selectAll.checked=selectors.length>0&&selected===selectors.length;selectAll.indeterminate=selected>0&&selected<selectors.length;}};
+    selectAll?.addEventListener('change',()=>{selectors.forEach(x=>x.checked=selectAll.checked);update();});
+    selectors.forEach(x=>x.addEventListener('change',update));
+    update();
+});
+</script>}

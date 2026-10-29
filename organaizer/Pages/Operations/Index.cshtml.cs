@@ -126,6 +126,26 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
         return RedirectToPage(new { search, typeCode, status, from = from?.ToString("yyyy-MM-dd"), to = to?.ToString("yyyy-MM-dd"), sort, pageNumber });
     }
 
+    public async Task<IActionResult> OnPostCompleteSelectedAsync(List<Guid>? selectedIds, string? search,
+        Guid? companyId, string? typeCode, string? status, DateTime? from, DateTime? to, string? sort, int pageNumber = 1)
+    {
+        var ids = (selectedIds ?? []).Distinct().Take(PageSize).ToList();
+        var operations = ids.Count == 0
+            ? []
+            : await db.Operations.Where(x => ids.Contains(x.Id) && x.CompanyId == active.RequiredId &&
+                x.TypeCode != TransferService.TypeCode && x.Status != OperationStatus.Settled &&
+                x.Status != OperationStatus.Cancelled).ToListAsync();
+
+        foreach (var operation in operations) operation.Status = OperationStatus.Settled;
+        if (operations.Count > 0) await db.SaveChangesAsync();
+
+        TempData["Message"] = operations.Count > 0
+            ? $"Завершено операций: {operations.Count}"
+            : "Нет выбранных незавершённых операций";
+        return RedirectToPage(new { search, companyId, typeCode, status,
+            from = from?.ToString("yyyy-MM-dd"), to = to?.ToString("yyyy-MM-dd"), sort, pageNumber });
+    }
+
     public async Task<IActionResult> OnPostCancelAsync(Guid id, string? search, Guid? companyId, string? typeCode, string? status, DateTime? from, DateTime? to, string? sort, int pageNumber = 1)
     {
         if(await db.Operations.AnyAsync(x=>x.Id==id && x.TypeCode==TransferService.TypeCode)) return RedirectToPage("/Operations/Transfers/Details",new { id });

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.EntityFrameworkCore;
 using OfficeOpenXml;
 using organaizer.Application;
@@ -71,7 +72,12 @@ var newer=Operation(Guid.Parse("00000000-0000-0000-0000-000000000001"),altyn,fro
 var unrelated=Operation(Guid.NewGuid(),altSpot,from.AddHours(3));
 db.AddRange(older,newer,unrelated);
 await db.SaveChangesAsync();
+accessor.HttpContext!.RequestServices=new ServiceCollection()
+    .AddSingleton<ITempDataProvider,TestTempDataProvider>()
+    .AddSingleton<ITempDataDictionaryFactory,TempDataDictionaryFactory>()
+    .BuildServiceProvider();
 var operationsPage=new organaizer.Pages.Operations.IndexModel(db,new Dispatcher(new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider()),active);
+operationsPage.PageContext=new PageContext { HttpContext=accessor.HttpContext! };
 await operationsPage.OnGetAsync(" АЛТЫН ",null,null,null,null,null,null);
 Check(operationsPage.TotalCount==2 && operationsPage.Items.All(x=>x.CounterpartyId==altyn.Id),"Client search matches full text regardless of case and excludes hidden notes");
 Check(operationsPage.Items.Select(x=>x.Id).SequenceEqual(new[]{newer.Id,older.Id}),"Newest creation comes first within the same operation date, regardless of GUID");
@@ -92,6 +98,10 @@ using(var operationsPackage=new ExcelPackage(new MemoryStream(operationsExport.F
     Check(sheet.Cells[1,5].Text=="Валюта отдаём" && sheet.Cells[1,8].Text=="Валюта получаем" && sheet.Cells[1,12].Text=="Валюта прибыли","Operations export separates currency into filterable columns");
     Check(sheet.Cells[2,4].Value is not string && !sheet.Cells[2,4].Style.Numberformat.Format.Contains("USD"),"Operations export keeps amounts numeric without currency text");
 }
+Check(await operationsPage.OnPostCompleteSelectedAsync([newer.Id,older.Id],null,company.Id,null,null,null,null,null) is RedirectToPageResult,
+    "Bulk completion returns to the operations list");
+Check(newer.Status==OperationStatus.Settled && older.Status==OperationStatus.Cancelled && unrelated.Status!=OperationStatus.Settled,
+    "Bulk completion changes only selected eligible operations");
 
 var previewPage = new CreateModel(db,active);
 var preview = (JsonResult)await previewPage.OnGetConvertAsync(875m,"KGS",date);
@@ -194,4 +204,15 @@ sealed class TestSession : ISession
     public void Remove(string key)=>values.Remove(key);
     public void Set(string key,byte[] value)=>values[key]=value;
     public bool TryGetValue(string key,out byte[] value)=>values.TryGetValue(key,out value!);
+}
+
+sealed class TestTempDataProvider : ITempDataProvider
+{
+    readonly Dictionary<string,object> values=[];
+    public IDictionary<string,object> LoadTempData(HttpContext context)=>values;
+    public void SaveTempData(HttpContext context,IDictionary<string,object> data)
+    {
+        values.Clear();
+        foreach(var item in data) values[item.Key]=item.Value;
+    }
 }
