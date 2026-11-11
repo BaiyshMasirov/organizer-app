@@ -8,6 +8,8 @@ namespace organaizer.Pages.Operations.Transfers;
 
 public sealed class CreateModel(FinanceDbContext db, ActiveCompany active) : PageModel
 {
+    [BindProperty(SupportsGet = true)] public string? ReturnUrl { get; set; }
+    public string ReturnTarget => Url.IsLocalUrl(ReturnUrl) ? ReturnUrl! : "/Operations";
     [BindProperty] public TransferForm Input { get; set; } = new();
     public List<MoneyAccount> Accounts { get; private set; } = [];
     public bool IsCopy { get; private set; }
@@ -35,7 +37,7 @@ public sealed class CreateModel(FinanceDbContext db, ActiveCompany active) : Pag
                 var id=await new TransferService(db).CreateAsync(active.RequiredId,Input.FromAccountId,Input.ToAccountId,
                     Input.Amount,Input.OccurredAt,Input.Note,User.Identity?.Name??"system");
                 TempData["Message"]="Перевод сохранён";
-                return RedirectToPage("Details",new { id });
+                return LocalRedirect(ReturnTarget);
             }
             catch(ArgumentException ex) { ModelState.AddModelError("",ex.Message); }
         }

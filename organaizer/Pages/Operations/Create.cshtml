@@ -17,10 +17,11 @@
 
 <div class="d-flex justify-content-between align-items-start mb-4">
   <div><h1 class="mb-1">Новая операция</h1>@if(Model.IsCopy){<div class="text-secondary">Данные скопированы. После сохранения будет создана отдельная операция.</div>}</div>
-  <a asp-page="Index" class="btn btn-light">Отмена</a>
+  <a href="@Model.ReturnTarget" class="btn btn-light">Отмена</a>
 </div>
 
 <form method="post" class="card card-body" id="operation-form" data-copy="@Model.IsCopy.ToString().ToLowerInvariant()" data-aa="@Model.IsLiquidityProvider.ToString().ToLowerInvariant()">
+  <input asp-for="ReturnUrl" type="hidden"/>
   @if(ViewData.ModelState.ErrorCount>0){<div asp-validation-summary="All" class="alert alert-danger"></div>}
   <input asp-for="Input.SellCurrency" type="hidden"/>
   <input asp-for="Input.BuyCurrency" type="hidden"/>

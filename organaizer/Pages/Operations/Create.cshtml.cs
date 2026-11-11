@@ -11,6 +11,8 @@ namespace organaizer.Pages.Operations;
 
 public sealed class CreateModel(Dispatcher dispatcher, FinanceDbContext db, ActiveCompany active) : PageModel
 {
+    [BindProperty(SupportsGet = true)] public string? ReturnUrl { get; set; }
+    public string ReturnTarget => Url.IsLocalUrl(ReturnUrl) ? ReturnUrl! : "/Operations";
     [BindProperty] public InputModel Input { get; set; } = new();
     [BindProperty] public bool ConfirmInsufficientFunds { get; set; }
     public bool IsCopy { get; private set; }
@@ -49,7 +51,7 @@ public sealed class CreateModel(Dispatcher dispatcher, FinanceDbContext db, Acti
         var source = await db.Operations.AsNoTracking().Include(x => x.Settlements)
             .SingleOrDefaultAsync(x => x.Id == copyFrom && x.CompanyId == active.RequiredId);
         if (source is null) return NotFound();
-        if(source.TypeCode==TransferService.TypeCode) return RedirectToPage("/Operations/Transfers/Create",new { copyFrom=source.Id });
+        if(source.TypeCode==TransferService.TypeCode) return RedirectToPage("/Operations/Transfers/Create",new { copyFrom=source.Id, returnUrl=ReturnUrl });
         var sellSettlement = source.Settlements.Where(x => x.Amount < 0).OrderBy(x => x.OccurredAt).FirstOrDefault();
         var buySettlement = source.Settlements.Where(x => x.Amount > 0).OrderBy(x => x.OccurredAt).FirstOrDefault();
         Input = new InputModel
@@ -168,7 +170,8 @@ public sealed class CreateModel(Dispatcher dispatcher, FinanceDbContext db, Acti
         if (buy is not null)
             await dispatcher.Send(new AddSettlementCommand(operationId, buy.Id, new DateTimeOffset(i.OccurredAt, TimeSpan.Zero), i.BuyAmount, i.BuyCurrency, "Зачисление по операции"));
         await tx.CommitAsync();
-        return RedirectToPage("Index");
+        TempData["Message"] = "Операция сохранена";
+        return LocalRedirect(ReturnTarget);
     }
 
     private async Task Load()
