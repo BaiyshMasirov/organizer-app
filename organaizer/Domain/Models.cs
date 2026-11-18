@@ -229,8 +229,10 @@ public static class OperationTypes
         ["SELL_USD_RUB"]="Конвертация USD/RUB · Продажа USD / покупка RUB",
         ["BUY_AED_RUB"]="Конвертация AED/RUB · Покупка AED / продажа RUB",
         ["SELL_AED_RUB"]="Конвертация AED/RUB · Продажа AED / покупка RUB",
+        ["SELL_RUB_RUB"]="Продажа RUB/RUB",
         ["CREDIT_USDT"]="Кредит USDT/USDT", ["LIQUIDITY_USDT"]="Ликвидность USDT/USDT",
         ["SELL_USD_AED"]="Конвертация (продажа) USD/AED", ["BUY_USD_AED"]="Конвертация (покупка) USD/AED",
+        ["LOAN_RECEIVED"]="Получение займа", ["LOAN_REPAID"]="Возврат займа",
         ["OTHER_INCOME_COMMISSION"]="Прочий приход (Комиссия)"
     };
     public static (string Sell, string Buy) Pair(string code) => code switch
@@ -240,11 +242,14 @@ public static class OperationTypes
         "BUY_USDT_RUB" => ("RUB","USDT"), "SELL_USDT_RUB" => ("USDT","RUB"),
         "BUY_USD_RUB" => ("RUB","USD"), "SELL_USD_RUB" => ("USD","RUB"),
         "BUY_AED_RUB" => ("RUB","AED"), "SELL_AED_RUB" => ("AED","RUB"),
+        "SELL_RUB_RUB" => ("RUB","RUB"),
         "SELL_USD_AED" => ("USD","AED"), "BUY_USD_AED" => ("AED","USD"),
         "OTHER_INCOME_COMMISSION" => ("USD","USD"),
         _ => ("USDT","USDT")
     };
     public static bool IsOneSidedIncome(string code) => code == "OTHER_INCOME_COMMISSION";
+    public static bool IsLoan(string code) => code is "LOAN_RECEIVED" or "LOAN_REPAID";
+    public static bool IsBalanceOnly(string code) => IsLoan(code);
     public static string PairLabel(string code){var p=Pair(code);return $"{p.Sell}/{p.Buy}";}
 
     /// <summary>
@@ -259,6 +264,7 @@ public static class OperationTypes
         "BUY_USD_RUB" or "SELL_USD_RUB" => ("USD", "RUB"),
         "SELL_USD_AED" or "BUY_USD_AED" => ("USD", "AED"),
         "BUY_AED_RUB" or "SELL_AED_RUB" => ("AED", "RUB"),
+        "SELL_RUB_RUB" => ("RUB", "RUB"),
         _ => Pair(code) is var pair ? (pair.Buy, pair.Sell) : ("USDT", "USD")
     };
 
@@ -274,6 +280,8 @@ public static class OperationTypes
     {
         if (sellAmount <= 0 || buyAmount <= 0) return null;
         var market = MarketPair(code);
+        if (market.Base.Equals(market.Quote, StringComparison.OrdinalIgnoreCase))
+            return buyAmount / sellAmount;
         var baseAmount = sellCurrency.Equals(market.Base, StringComparison.OrdinalIgnoreCase) ? sellAmount
             : buyCurrency.Equals(market.Base, StringComparison.OrdinalIgnoreCase) ? buyAmount : 0;
         var quoteAmount = sellCurrency.Equals(market.Quote, StringComparison.OrdinalIgnoreCase) ? sellAmount

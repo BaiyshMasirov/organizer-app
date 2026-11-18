@@ -60,6 +60,7 @@ public sealed class UpdateOperationHandler(FinanceDbContext db) : ICommandHandle
             throw new ArgumentException(oneSidedIncome ? "Для прочего прихода заполните только сумму получения" : "Суммы должны быть больше нуля");
         var op = await db.Operations.SingleAsync(x => x.Id == c.Id, ct);
         if(op.TypeCode==TransferService.TypeCode) throw new ArgumentException("Используйте редактирование перевода.");
+        if(OperationTypes.IsLoan(op.TypeCode)) throw new ArgumentException("Движение займа нельзя превращать в торговую операцию.");
         var settlements = await db.Settlements.Where(x => x.OperationId == c.Id).ToListAsync(ct);
         op.CompanyId=c.CompanyId; op.CounterpartyId=c.CounterpartyId; op.TypeCode=c.TypeCode;
         op.OccurredAt=c.OccurredAt.ToUniversalTime(); op.DueAt=c.DueAt?.ToUniversalTime();
@@ -141,7 +142,7 @@ public sealed class ReactivateOperationHandler(FinanceDbContext db) : ICommandHa
     {
         var operation=await db.Operations.SingleOrDefaultAsync(x=>x.Id==c.Id,ct);
         if(operation is null || operation.TypeCode==TransferService.TypeCode || operation.Status!=OperationStatus.Cancelled)return false;
-        operation.Status=OperationStatus.Open;
+        operation.Status=OperationTypes.IsLoan(operation.TypeCode) ? OperationStatus.Settled : OperationStatus.Open;
         await db.SaveChangesAsync(ct);
         return true;
     }
@@ -191,7 +192,9 @@ public sealed class DashboardHandler(FinanceDbContext db) : IQueryHandler<Dashbo
 {
     public async Task<DashboardDto> Handle(DashboardQuery q, CancellationToken ct)
     {
-        var ops = db.Operations.AsNoTracking().Where(x => x.TypeCode != TransferService.TypeCode && x.OccurredAt >= q.From && x.OccurredAt < q.To && x.Status != OperationStatus.Cancelled);
+        var ops = db.Operations.AsNoTracking().Where(x => x.TypeCode != TransferService.TypeCode &&
+            x.TypeCode != LoanService.ReceivedTypeCode && x.TypeCode != LoanService.RepaidTypeCode &&
+            x.OccurredAt >= q.From && x.OccurredAt < q.To && x.Status != OperationStatus.Cancelled);
         var expenses = db.Expenses.AsNoTracking().Where(x => x.OccurredAt >= q.From && x.OccurredAt < q.To);
         var accounts = db.Accounts.AsNoTracking().AsQueryable();
         if (q.CompanyId is { } id) { ops=ops.Where(x=>x.CompanyId==id); expenses=expenses.Where(x=>x.CompanyId==id); accounts=accounts.Where(x=>x.CompanyId==id); }
@@ -228,7 +231,8 @@ public sealed class MonthlyReportHandler(FinanceDbContext db) : IQueryHandler<Mo
         var operations = db.Operations.AsNoTracking().Include(x=>x.Counterparty).Where(x => x.TypeCode != TransferService.TypeCode && x.OccurredAt >= q.From && x.OccurredAt < q.To && x.Status == OperationStatus.Settled);
         var expenses = db.Expenses.AsNoTracking().Where(x => x.OccurredAt >= q.From && x.OccurredAt < q.To);
         if (q.CompanyId is { } companyId) { operations=operations.Where(x=>x.CompanyId==companyId); expenses=expenses.Where(x=>x.CompanyId==companyId); }
-        var rows = await operations.ToListAsync(ct);
+        var balanceRows = await operations.ToListAsync(ct);
+        var rows = balanceRows.Where(x => !OperationTypes.IsBalanceOnly(x.TypeCode)).ToList();
         var expenseRows = await expenses.ToListAsync(ct);
         var companyKinds = await db.Companies.AsNoTracking().ToDictionaryAsync(x=>x.Id,x=>x.Kind,ct);
         var rateRows=await db.ExchangeRates.AsNoTracking().Where(x=>x.EffectiveAt<q.To&&x.RateToUsd>0&&x.RateToUsd<2).OrderBy(x=>x.EffectiveAt).ThenBy(x=>x.SourceOrder).ThenBy(x=>x.ImportKey==null?1:0).ToListAsync(ct);
@@ -284,10 +288,10 @@ public sealed class MonthlyReportHandler(FinanceDbContext db) : IQueryHandler<Mo
                     var liquidityCompanyIds=companyKinds.Where(c=>c.Value==CompanyKind.LiquidityProvider).Select(c=>c.Key).ToList();
                     var priorOps=await db.Operations.AsNoTracking().Where(x=>x.TypeCode!=TransferService.TypeCode&&x.OccurredAt>=start&&x.OccurredAt<q.From&&x.Status==OperationStatus.Settled&&liquidityCompanyIds.Contains(x.CompanyId)).ToListAsync(ct);
                     var priorExpenses=await db.Expenses.AsNoTracking().Where(x=>x.OccurredAt>=start&&x.OccurredAt<q.From&&liquidityCompanyIds.Contains(x.CompanyId)).ToListAsync(ct);
-                    foreach(var currency in latest.Select(x=>x.Currency).Concat(rows.SelectMany(x=>new[]{x.BuyCurrency,x.SellCurrency})).Distinct())
+                    foreach(var currency in latest.Select(x=>x.Currency).Concat(balanceRows.SelectMany(x=>new[]{x.BuyCurrency,x.SellCurrency})).Distinct())
                     {
                         var last=latest.FirstOrDefault(x=>x.Currency==currency);var opening=(last?.ClosingAmount??0)+priorOps.Where(x=>x.BuyCurrency==currency).Sum(x=>x.BuyAmount)-priorOps.Where(x=>x.SellCurrency==currency).Sum(x=>x.SellAmount)-priorExpenses.Where(x=>x.Currency==currency).Sum(x=>x.Amount);
-                        var closing=opening+rows.Where(x=>x.BuyCurrency==currency).Sum(x=>x.BuyAmount)-rows.Where(x=>x.SellCurrency==currency).Sum(x=>x.SellAmount)-expenseRows.Where(x=>x.Currency==currency).Sum(x=>x.Amount)-liveLpRows.Where(x=>x.FeeCurrency==currency).Sum(x=>x.FeeAmount);
+                        var closing=opening+balanceRows.Where(x=>x.BuyCurrency==currency).Sum(x=>x.BuyAmount)-balanceRows.Where(x=>x.SellCurrency==currency).Sum(x=>x.SellAmount)-expenseRows.Where(x=>x.Currency==currency).Sum(x=>x.Amount)-liveLpRows.Where(x=>x.FeeCurrency==currency).Sum(x=>x.FeeAmount);
                         balances.Add(new(currency,opening,closing,InUsd(opening,currency),InUsd(closing,currency)));
                     }
                 }

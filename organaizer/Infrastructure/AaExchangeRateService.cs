@@ -31,6 +31,7 @@ public static class AaExchangeRateService
     public static async Task<decimal?> MarketRateAsync(FinanceDbContext db, string typeCode, DateTime date, CancellationToken ct = default)
     {
         var pair = Domain.OperationTypes.MarketPair(typeCode);
+        if (pair.Base.Equals(pair.Quote, StringComparison.OrdinalIgnoreCase)) return 1m;
         var baseRate = await RateToUsdAsync(db, pair.Base, date, ct);
         var quoteRate = await RateToUsdAsync(db, pair.Quote, date, ct);
         return baseRate.HasValue && quoteRate.HasValue && quoteRate.Value != 0

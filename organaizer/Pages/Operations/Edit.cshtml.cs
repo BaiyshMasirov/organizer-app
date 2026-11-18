@@ -19,7 +19,8 @@ public sealed class EditModel(Dispatcher dispatcher, FinanceDbContext db, Active
     public List<SelectListItem> Currencies { get; private set; } = [];
     public List<MoneyAccount> AccountItems { get; private set; } = [];
     public bool IsLiquidityProvider { get; private set; }
-    public IReadOnlyDictionary<string, string> Types => OperationTypes.All;
+    public IReadOnlyDictionary<string, string> Types => OperationTypes.All
+        .Where(x => !OperationTypes.IsLoan(x.Key)).ToDictionary();
 
     public sealed class InputModel
     {
@@ -47,6 +48,7 @@ public sealed class EditModel(Dispatcher dispatcher, FinanceDbContext db, Active
         var x = await db.Operations.AsNoTracking().Include(x => x.Settlements).SingleOrDefaultAsync(x => x.Id == id);
         if (x is null) return NotFound();
         if(x.TypeCode==TransferService.TypeCode) return RedirectToPage("/Operations/Transfers/Edit",new { id, returnUrl=ReturnUrl });
+        if(OperationTypes.IsLoan(x.TypeCode)) return RedirectToPage("/Operations/Details",new { id, returnUrl=ReturnUrl });
         await Load();
         Input = new InputModel
         {
@@ -86,7 +88,8 @@ public sealed class EditModel(Dispatcher dispatcher, FinanceDbContext db, Active
 
     public async Task<IActionResult> OnPostAsync()
     {
-        if(await db.Operations.AnyAsync(x=>x.Id==Input.Id && x.TypeCode==TransferService.TypeCode)) return BadRequest();
+        if(await db.Operations.AnyAsync(x=>x.Id==Input.Id &&
+            (x.TypeCode==TransferService.TypeCode || x.TypeCode==LoanService.ReceivedTypeCode || x.TypeCode==LoanService.RepaidTypeCode))) return BadRequest();
         Input.CompanyId = active.RequiredId;
         ModelState.Remove("Input.CompanyId");
         var companyKind = await db.Companies.AsNoTracking().Where(x => x.Id == active.RequiredId).Select(x => (CompanyKind?)x.Kind).SingleOrDefaultAsync();

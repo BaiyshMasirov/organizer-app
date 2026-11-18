@@ -75,6 +75,7 @@ await db.SaveChangesAsync();
 accessor.HttpContext!.RequestServices=new ServiceCollection()
     .AddSingleton<ITempDataProvider,TestTempDataProvider>()
     .AddSingleton<ITempDataDictionaryFactory,TempDataDictionaryFactory>()
+    .AddSingleton<Microsoft.AspNetCore.Mvc.Routing.IUrlHelperFactory,Microsoft.AspNetCore.Mvc.Routing.UrlHelperFactory>()
     .BuildServiceProvider();
 var operationsPage=new organaizer.Pages.Operations.IndexModel(db,new Dispatcher(new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider()),active);
 operationsPage.PageContext=new PageContext { HttpContext=accessor.HttpContext! };
@@ -102,6 +103,19 @@ Check(await operationsPage.OnPostCompleteSelectedAsync([newer.Id,older.Id],null,
     "Bulk completion returns to the operations list");
 Check(newer.Status==OperationStatus.Settled && older.Status==OperationStatus.Cancelled && unrelated.Status!=OperationStatus.Settled,
     "Bulk completion changes only selected eligible operations");
+var singleActionServices=new ServiceCollection()
+    .AddSingleton<ICommandHandler<CompleteOperationCommand,bool>>(new CompleteOperationHandler(db))
+    .BuildServiceProvider();
+var singleActionPage=new organaizer.Pages.Operations.IndexModel(db,new Dispatcher(singleActionServices),active) {
+    PageContext=new PageContext {
+        HttpContext=accessor.HttpContext!, RouteData=new Microsoft.AspNetCore.Routing.RouteData(),
+        ActionDescriptor=new Microsoft.AspNetCore.Mvc.RazorPages.CompiledPageActionDescriptor()
+    }
+};
+var filteredReturn="/Operations?search=Альт&status=Open&from=2026-10-02&pageNumber=2";
+var singleActionResult=await singleActionPage.OnPostCompleteAsync(unrelated.Id,filteredReturn,null,null,null,null,null,null);
+Check(singleActionResult is LocalRedirectResult local && local.Url==filteredReturn,
+    "Single completion returns to the exact filtered operations page");
 
 var previewPage = new CreateModel(db,active);
 var preview = (JsonResult)await previewPage.OnGetConvertAsync(875m,"KGS",date);
@@ -124,12 +138,16 @@ Check(buyUsdtAedRate is >3.67m and <3.68m,"USDT/AED purchase rate is AED per USD
 Check(sellUsdtAedRate is >3.67m and <3.69m,"USDT/AED sale rate keeps the same AED per USDT direction");
 Check(!OperationTypes.MultiplyRate("BUY_USDT_RUB") && OperationTypes.MultiplyRate("SELL_USDT_RUB"),"Purchases divide by price and sales multiply by price");
 Check(OperationTypes.Pair("BUY_AED_RUB") == ("RUB","AED") && OperationTypes.Pair("SELL_AED_RUB") == ("AED","RUB"),"Both AED/RUB conversion directions are available");
+Check(OperationTypes.Pair("SELL_RUB_RUB") == ("RUB","RUB") &&
+    OperationTypes.CanonicalRate("SELL_RUB_RUB","RUB",100m,"RUB",110m)==1.1m,
+    "RUB/RUB sale is available and uses received divided by given amount");
 db.ExchangeRates.AddRange(
     new ExchangeRate { Id=Guid.NewGuid(), Currency="RUB", EffectiveAt=new DateTimeOffset(date,TimeSpan.Zero), SourceOrder=1, RateToUsd=.0125m },
     new ExchangeRate { Id=Guid.NewGuid(), Currency="AED", EffectiveAt=new DateTimeOffset(date,TimeSpan.Zero), SourceOrder=1, RateToUsd=.25m });
 await db.SaveChangesAsync();
 Check(await AaExchangeRateService.MarketRateAsync(db,"BUY_USDT_RUB",date)==80.24m && await AaExchangeRateService.MarketRateAsync(db,"SELL_USDT_RUB",date)==80.24m,"Purchase and sale load the same RUB/USDT market rate");
 Check(await AaExchangeRateService.MarketRateAsync(db,"BUY_AED_RUB",date)==20m,"AED/RUB rate is loaded as RUB per AED");
+Check(await AaExchangeRateService.MarketRateAsync(db,"SELL_RUB_RUB",date)==1m,"RUB/RUB reference rate is one");
 
 var movementDate=new DateTime(2026,9,15);
 var movementInstant=organaizer.Pages.Balance.IndexModel.MovementInstant(movementDate);

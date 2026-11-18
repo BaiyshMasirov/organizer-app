@@ -98,6 +98,41 @@ await service.CancelAsync(company.Id,overdraftId,1,"test");
 Check(await BalanceCalculator.GetAsync(db,overdrawn.Id)==-100m && await BalanceCalculator.GetAsync(db,b.Id)==50m,
     "Cancelling an overdraft transfer restores both balances");
 
+active.Select(other.Id);
+var lender=new Counterparty { Id=Guid.NewGuid(),CompanyId=other.Id,Name="ИК Ориент Капитал" };
+db.Counterparties.Add(lender);
+await db.SaveChangesAsync();
+var loanService=new LoanService(db);
+var loanReportBefore=await new MonthlyReportHandler(db).Handle(new(other.Id,from,to),default);
+var receipt1=await loanService.CreateAsync(other.Id,lender.Id,foreign.Id,LoanService.ReceivedTypeCode,1000m,date,new DateTime(2026,12,31),"Транш 1");
+var receipt2=await loanService.CreateAsync(other.Id,lender.Id,foreign.Id,LoanService.ReceivedTypeCode,500m,date.AddDays(1),null,"Транш 2");
+var repayment=await loanService.CreateAsync(other.Id,lender.Id,foreign.Id,LoanService.RepaidTypeCode,400m,date.AddDays(2),null,"Частичный возврат");
+var loanIds=new[]{receipt1,receipt2,repayment};
+Check(await BalanceCalculator.GetAsync(db,foreign.Id)==2100m,"Several A&A loan tranches and a repayment change the bank balance once");
+Check(await db.Settlements.CountAsync(x=>loanIds.Contains(x.OperationId))==3 &&
+    await db.Operations.Where(x=>loanIds.Contains(x.Id)).AllAsync(x=>x.Status==OperationStatus.Settled),
+    "Every loan movement is an immediately completed one-sided cash fact");
+var loanPage=new organaizer.Pages.Operations.Loans.IndexModel(db,active);
+Check(await loanPage.OnGetAsync() is Microsoft.AspNetCore.Mvc.RazorPages.PageResult && loanPage.Summaries.Count==1,
+    "A&A loan control page loads the creditor balance");
+var loanSummary=loanPage.Summaries.Single();
+Check(loanSummary.Received==1500m && loanSummary.Repaid==400m && loanSummary.Outstanding==1100m,
+    "Loan control aggregates multiple tranches and partial repayments");
+var loanReportAfter=await new MonthlyReportHandler(db).Handle(new(other.Id,from,to),default);
+Check(loanReportAfter.Profit==loanReportBefore.Profit && loanReportAfter.Expenses==loanReportBefore.Expenses &&
+    loanReportAfter.Operations.Sum(x=>x.Count)==loanReportBefore.Operations.Sum(x=>x.Count) &&
+    loanReportAfter.Flows.SequenceEqual(loanReportBefore.Flows),
+    "A&A loans are excluded from turnover, expenses, profit and trading flows");
+var loanDashboard=await new DashboardHandler(db).Handle(new(other.Id,from,to),default);
+Check(loanDashboard.Balances.Single(x=>x.Account=="Foreign").Balance==2100m && loanDashboard.TradingProfit==0m,
+    "A&A dashboard includes loan cash in the bank balance but not in trading profit");
+await new CancelOperationHandler(db).Handle(new(repayment),default);
+Check(await BalanceCalculator.GetAsync(db,foreign.Id)==2500m,"Cancelling a repayment removes only that cash movement from the balance");
+await new ReactivateOperationHandler(db).Handle(new(repayment),default);
+Check(await BalanceCalculator.GetAsync(db,foreign.Id)==2100m &&
+    (await db.Operations.SingleAsync(x=>x.Id==repayment)).Status==OperationStatus.Settled,
+    "Restoring a loan movement makes it completed immediately and restores its cash effect");
+
 sealed class TestSession : ISession
 {
     private readonly Dictionary<string,byte[]> values=[];

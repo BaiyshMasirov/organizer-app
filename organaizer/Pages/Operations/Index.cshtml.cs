@@ -30,6 +30,7 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
     public int PageNumber { get; private set; } = 1;
     public int TotalPages { get; private set; }
     public int TotalCount { get; private set; }
+    public bool ShowLoans { get; private set; }
 
     public async Task OnGetAsync(string? search, Guid? companyId, string? typeCode, string? status, DateTime? from, DateTime? to, string? sort, int pageNumber = 1)
     {
@@ -37,6 +38,7 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
         CompanyId = active.RequiredId;
         PageNumber = Math.Max(1, pageNumber);
         Companies = await db.Companies.AsNoTracking().Where(x => x.Id == active.RequiredId).ToListAsync();
+        ShowLoans = Companies.Any(x => x.Kind == CompanyKind.LiquidityProvider);
 
         var query = BuildQuery(Search, TypeCode, Status, From, To);
         TotalCount = await query.CountAsync();
@@ -118,11 +120,13 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
         return File(package.GetAsByteArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
-    public async Task<IActionResult> OnPostCompleteAsync(Guid id, string? search, string? typeCode, string? status, DateTime? from, DateTime? to, string? sort, int pageNumber = 1)
+    public async Task<IActionResult> OnPostCompleteAsync(Guid id, string? returnUrl, string? search, string? typeCode, string? status, DateTime? from, DateTime? to, string? sort, int pageNumber = 1)
     {
-        if(await db.Operations.AnyAsync(x=>x.Id==id && x.TypeCode==TransferService.TypeCode)) return BadRequest();
+        if(await db.Operations.AnyAsync(x=>x.Id==id && (x.TypeCode==TransferService.TypeCode ||
+            x.TypeCode==LoanService.ReceivedTypeCode || x.TypeCode==LoanService.RepaidTypeCode))) return BadRequest();
         await dispatcher.Send(new CompleteOperationCommand(id));
         TempData["Message"] = "Операция завершена";
+        if (Url.IsLocalUrl(returnUrl)) return LocalRedirect(returnUrl);
         return RedirectToPage(new { search, typeCode, status, from = from?.ToString("yyyy-MM-dd"), to = to?.ToString("yyyy-MM-dd"), sort, pageNumber });
     }
 
@@ -133,7 +137,8 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
         var operations = ids.Count == 0
             ? []
             : await db.Operations.Where(x => ids.Contains(x.Id) && x.CompanyId == active.RequiredId &&
-                x.TypeCode != TransferService.TypeCode && x.Status != OperationStatus.Settled &&
+                x.TypeCode != TransferService.TypeCode && x.TypeCode != LoanService.ReceivedTypeCode &&
+                x.TypeCode != LoanService.RepaidTypeCode && x.Status != OperationStatus.Settled &&
                 x.Status != OperationStatus.Cancelled).ToListAsync();
 
         foreach (var operation in operations) operation.Status = OperationStatus.Settled;
@@ -146,19 +151,21 @@ public sealed class IndexModel(FinanceDbContext db, Dispatcher dispatcher, Activ
             from = from?.ToString("yyyy-MM-dd"), to = to?.ToString("yyyy-MM-dd"), sort, pageNumber });
     }
 
-    public async Task<IActionResult> OnPostCancelAsync(Guid id, string? search, Guid? companyId, string? typeCode, string? status, DateTime? from, DateTime? to, string? sort, int pageNumber = 1)
+    public async Task<IActionResult> OnPostCancelAsync(Guid id, string? returnUrl, string? search, Guid? companyId, string? typeCode, string? status, DateTime? from, DateTime? to, string? sort, int pageNumber = 1)
     {
         if(await db.Operations.AnyAsync(x=>x.Id==id && x.TypeCode==TransferService.TypeCode)) return RedirectToPage("/Operations/Transfers/Details",new { id });
         await dispatcher.Send(new CancelOperationCommand(id));
         TempData["Message"] = "Операция отменена";
+        if (Url.IsLocalUrl(returnUrl)) return LocalRedirect(returnUrl);
         return RedirectToPage(new { search, companyId, typeCode, status, from = from?.ToString("yyyy-MM-dd"), to = to?.ToString("yyyy-MM-dd"), sort, pageNumber });
     }
 
-    public async Task<IActionResult> OnPostReactivateAsync(Guid id, string? search, Guid? companyId, string? typeCode, string? status, DateTime? from, DateTime? to, string? sort, int pageNumber = 1)
+    public async Task<IActionResult> OnPostReactivateAsync(Guid id, string? returnUrl, string? search, Guid? companyId, string? typeCode, string? status, DateTime? from, DateTime? to, string? sort, int pageNumber = 1)
     {
         if(await db.Operations.AnyAsync(x=>x.Id==id && x.TypeCode==TransferService.TypeCode)) return BadRequest();
         var restored = await dispatcher.Send(new ReactivateOperationCommand(id));
         TempData["Message"] = restored ? "Операция восстановлена и переведена в статус «Создана»" : "Операцию не удалось восстановить";
+        if (Url.IsLocalUrl(returnUrl)) return LocalRedirect(returnUrl);
         return RedirectToPage(new { search, companyId, typeCode, status, from = from?.ToString("yyyy-MM-dd"), to = to?.ToString("yyyy-MM-dd"), sort, pageNumber });
     }
 

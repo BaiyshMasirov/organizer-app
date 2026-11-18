@@ -23,7 +23,8 @@ public sealed class CreateModel(Dispatcher dispatcher, FinanceDbContext db, Acti
     public List<MoneyAccount> AccountItems { get; private set; } = [];
     public Dictionary<Guid, decimal> AccountBalances { get; private set; } = [];
     public string? BalanceError { get; private set; }
-    public IReadOnlyDictionary<string, string> Types => OperationTypes.All;
+    public IReadOnlyDictionary<string, string> Types => OperationTypes.All
+        .Where(x => !OperationTypes.IsLoan(x.Key)).ToDictionary();
 
     public sealed class InputModel
     {

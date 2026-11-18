@@ -1,0 +1,15 @@
+@page
+@model organaizer.Pages.Operations.Loans.CreateModel
+@using organaizer.Infrastructure
+@{ViewData["Title"]="Движение займа";}
+
+<div class="d-flex justify-content-between align-items-start mb-4"><div><h1 class="mb-1">Движение займа</h1><div class="text-secondary">Записывается только фактический приход или расход денег.</div></div><a href="@Model.ReturnTarget" class="btn btn-light">Отмена</a></div>
+<form method="post" class="card card-body"><input asp-for="ReturnUrl" type="hidden"/><div asp-validation-summary="All" class="alert alert-danger"></div><div class="row g-3">
+  <div class="col-md-6"><label asp-for="Input.TypeCode" class="form-label">Движение</label><select asp-for="Input.TypeCode" class="form-select"><option value="@LoanService.ReceivedTypeCode">Получили займ — приход на наш счёт</option><option value="@LoanService.RepaidTypeCode">Вернули займ — расход с нашего счёта</option></select></div>
+  <div class="col-md-6"><label asp-for="Input.CounterpartyId" class="form-label">Кредитор / контрагент</label><select asp-for="Input.CounterpartyId" asp-items="Model.Counterparties" class="form-select" required><option value="">Выберите контрагента</option></select></div>
+  <div class="col-md-6"><label asp-for="Input.AccountId" class="form-label">Наш банковский счёт или кошелёк</label><select asp-for="Input.AccountId" class="form-select" required><option value="">Выберите счёт</option>@foreach(var a in Model.Accounts){<option value="@a.Id">@TransferService.Label(a) · @a.Currency</option>}</select></div>
+  <div class="col-md-3"><label asp-for="Input.Amount" class="form-label">Сумма</label><input asp-for="Input.Amount" type="number" min="0.00000001" step="any" inputmode="decimal" class="form-control" required/></div>
+  <div class="col-md-3"><label asp-for="Input.OccurredAt" class="form-label">Дата движения</label><input asp-for="Input.OccurredAt" type="date" class="form-control" required/></div>
+  <div class="col-md-3"><label asp-for="Input.DueAt" class="form-label">Плановая дата возврата</label><input asp-for="Input.DueAt" type="date" class="form-control"/></div>
+  <div class="col-md-9"><label asp-for="Input.Note" class="form-label">Комментарий / основание</label><input asp-for="Input.Note" class="form-control" maxlength="500" placeholder="Договор, транш или назначение"/></div>
+</div><div class="alert alert-info mt-4 mb-0">Получение увеличит баланс выбранного счёта, возврат уменьшит его. В торговый оборот и прибыль эти движения не попадут.</div><div class="mt-4"><button class="btn btn-primary">Сохранить движение</button></div></form>

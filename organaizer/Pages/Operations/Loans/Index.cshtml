@@ -1,0 +1,25 @@
+@page
+@model organaizer.Pages.Operations.Loans.IndexModel
+@using organaizer.Domain
+@using organaizer.Infrastructure
+@{ViewData["Title"]="Займы";var returnUrl=(Request.Path+Request.QueryString).ToString();}
+
+<div class="d-flex justify-content-between align-items-start mb-4"><div><h1 class="mb-1">Займы</h1><div class="text-secondary">Получения и возвраты влияют только на остатки счетов; открытый долг считается отдельно.</div></div><div class="btn-list"><a asp-page="/Operations/Index" class="btn btn-light">К операциям</a>@if(await Permissions.HasAsync(User,AppPermissions.Operations.Create)){<a asp-page="Create" asp-route-returnUrl="@returnUrl" class="btn btn-primary">+ Движение займа</a>}</div></div>
+@if(TempData["Message"] is string message){<div class="alert alert-success">@message</div>}
+
+<form method="get" class="card card-body mb-4"><div class="row g-3">
+  <div class="col-md-5"><label class="form-label">Контрагент</label><select asp-for="CounterpartyId" asp-items="Model.Counterparties" class="form-select"><option value="">Все контрагенты</option></select></div>
+  <div class="col-md-2"><label class="form-label">Валюта</label><select asp-for="Currency" asp-items="Model.Currencies" class="form-select"><option value="">Все</option></select></div>
+  <div class="col-md-3"><label class="form-label">Состояние</label><select asp-for="State" class="form-select"><option value="open">Только открытый долг</option><option value="all">Вся история</option></select></div>
+  <div class="col-md-2 d-flex align-items-end gap-2"><button class="btn btn-primary">Показать</button><a asp-page="Index" class="btn btn-light">Сбросить</a></div>
+</div></form>
+
+<div class="card mb-4"><div class="card-header"><h2 class="card-title">Остатки долга</h2></div><div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>Контрагент</th><th>Валюта</th><th class="text-end">Получено</th><th class="text-end">Возвращено</th><th class="text-end">Остаток долга</th><th>Срок</th><th>Последнее движение</th></tr></thead><tbody>
+@foreach(var x in Model.Summaries){<tr><td><strong>@x.Counterparty</strong></td><td><span class="currency-token">@x.Currency</span></td><td class="text-end text-success">@x.Received.ToString("N2")</td><td class="text-end text-danger">@x.Repaid.ToString("N2")</td><td class="text-end fw-bold @(x.Outstanding>0?"text-warning":x.Outstanding<0?"text-danger":"text-success")">@x.Outstanding.ToString("N2") @x.Currency</td><td>@(x.DueAt?.ToString("dd.MM.yyyy")??"—")</td><td>@x.LastMovement.ToString("dd.MM.yyyy")</td></tr>}
+@if(Model.Summaries.Count==0){<tr><td colspan="7" class="empty-state">Открытых займов по выбранным условиям нет</td></tr>}
+</tbody></table></div></div>
+
+<div class="card"><div class="card-header"><h2 class="card-title">История движений</h2><span class="badge bg-blue-lt ms-2">@Model.Movements.Count</span></div><div class="table-responsive"><table class="table table-vcenter mb-0"><thead><tr><th>№</th><th>Дата</th><th>Контрагент</th><th>Движение</th><th>Счёт</th><th class="text-end">Сумма</th><th>Срок</th><th></th></tr></thead><tbody>
+@foreach(var x in Model.Movements){var received=x.TypeCode==LoanService.ReceivedTypeCode;<tr><td>@x.OperationNumber</td><td>@x.OccurredAt.ToString("dd.MM.yyyy")</td><td>@(x.Counterparty?.Name??"—")</td><td><span class="badge @(received?"bg-green-lt":"bg-orange-lt")">@(received?"Получение":"Возврат")</span></td><td>@(received?x.DestinationAccount:x.SourceAccount)</td><td class="text-end fw-bold @(received?"text-success":"text-danger")">@(received?"+":"−") @((received?x.BuyAmount:x.SellAmount).ToString("N2")) @x.BuyCurrency</td><td>@(x.DueAt?.ToString("dd.MM.yyyy")??"—")</td><td class="text-end"><a asp-page="/Operations/Details" asp-route-id="@x.Id" asp-route-returnUrl="@returnUrl" class="btn btn-sm btn-outline-secondary">Открыть</a></td></tr>}
+@if(Model.Movements.Count==0){<tr><td colspan="8" class="empty-state">Движений займа нет</td></tr>}
+</tbody></table></div></div>
